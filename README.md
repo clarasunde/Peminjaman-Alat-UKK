@@ -14,3 +14,7 @@ A few resources to get you started if this is your first Flutter project:
 For help getting started with Flutter development, view the
 [online documentation](https://docs.flutter.dev/), which offers tutorials,
 samples, guidance on mobile development, and a full API reference.
+## Supabase Configuration
+
+* **Project URL:** 'https://bfmadvkubnpgarzchvqh.supabase.co'
+* **Anon Key:** 'sb_publishable_dXv0dvhBX5796bN7eOvuaw_Dgq5dpIQ'
