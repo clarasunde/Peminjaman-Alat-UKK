@@ -11,63 +11,72 @@ class AuthService extends ChangeNotifier {
 
   User? get currentUser => _supabase.auth.currentUser;
 
+  bool get isLoggedIn => _supabase.auth.currentSession != null;
+
+  // =========================
+  // LOGIN
+  // =========================
   Future<String?> login(String email, String password) async {
-    _isLoading = true;
-    notifyListeners();
+    _setLoading(true);
 
     try {
-      // 1. Sign in ke Supabase Auth
-      final AuthResponse res = await _supabase.auth.signInWithPassword(
+      /// 1️⃣ Login Auth
+      final res = await _supabase.auth.signInWithPassword(
         email: email,
         password: password,
       );
 
-      if (res.user != null) {
-        // 2. Mengambil profil dari tabel public.users
-        // PERBAIKAN: Menggunakan 'id' sesuai kolom di database
-        final data = await _supabase
-            .from('users')
-            .select()
-            .eq('id', res.user!.id) 
-            .maybeSingle(); 
-
-        // 3. Validasi keberadaan data profil
-        if (data == null) {
-          _isLoading = false;
-          notifyListeners();
-          return "Profil tidak ditemukan di tabel users. Pastikan Trigger SQL berjalan.";
-        }
-
-        // 4. Cek Role (admin, petugas, atau peminjam)
-        if (data['role'] == null || data['role'].toString().isEmpty) {
-          _isLoading = false;
-          notifyListeners();
-          return "Role akun Anda belum diatur. Silakan hubungi Admin.";
-        }
-
-        userData = data;
-        print("Login Berhasil! Role: ${userData!['role']}");
+      if (res.user == null) {
+        _setLoading(false);
+        return "Login gagal";
       }
-      
-      _isLoading = false;
-      notifyListeners();
-      return null; 
+
+      /// 2️⃣ Ambil data users table (FIX KOLOM DI SINI)
+      final data = await _supabase
+          .from('users')
+          .select()
+          .eq('id_user', res.user!.id) // ✅ PERBAIKAN PENTING
+          .single();
+
+      if (data == null) {
+        _setLoading(false);
+        return "Profil tidak ditemukan. Trigger belum jalan.";
+      }
+
+      if (data['role'] == null) {
+        _setLoading(false);
+        return "Role belum diatur.";
+      }
+
+      userData = data;
+
+      _setLoading(false);
+
+      /// return role supaya login page yang redirect
+      return data['role'];
+
     } on AuthException catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      return e.message; 
+      _setLoading(false);
+      return e.message;
+
     } catch (e) {
-      _isLoading = false;
-      notifyListeners();
-      return "Terjadi kesalahan sistem: $e";
+      _setLoading(false);
+      return "Error sistem: $e";
     }
   }
 
+  // =========================
+  // LOGOUT
+  // =========================
   Future<void> logout() async {
     await _supabase.auth.signOut();
     userData = null;
     notifyListeners();
   }
 
-  bool get isLoggedIn => _supabase.auth.currentSession != null;
+
+  void _setLoading(bool val) {
+    _isLoading = val;
+    notifyListeners();
+  }
 }
