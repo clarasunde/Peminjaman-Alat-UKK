@@ -17,7 +17,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
  final List<Widget> _pages = [
   const BerandaPage(),
   const Center(child: Text("Halaman Pengguna")),
-  KelolaAlatPage(), // <--- Hapus 'const' nya saja
+   // <--- Hapus 'const' nya saja
   const Center(child: Text("Halaman Riwayat")),
   const LogoutScreen(),
 ];
