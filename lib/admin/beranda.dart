@@ -7,7 +7,6 @@ class BerandaPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Mengambil data user dari Provider agar nama di header dinamis
     final authService = Provider.of<AuthService>(context);
     final user = authService.userData;
 
@@ -15,107 +14,115 @@ class BerandaPage extends StatelessWidget {
       backgroundColor: Colors.white,
       body: Column(
         children: [
-          // 1. Header Profil Biru (Sesuai Desain Figma)
+          // 1. Header Profil Sesuai Figma (Biru Kotak Tanpa Rounded Bawah Berlebih)
           Container(
-            padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 30),
-            decoration: const BoxDecoration(
-              color: Color(0xFF1E4C90), // Warna biru utama
-              borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(25),
-                bottomRight: Radius.circular(25),
-              ),
-            ),
+            padding: const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 20),
+            width: double.infinity,
+            color: const Color(0xFF1E4C90), // Biru gelap Brantas
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      "Hallo ${user?['nama'] ?? 'Admin'}", 
-                      style: const TextStyle(
+                    const Text(
+                      "Hallo Admin", // Sesuai teks di Figma
+                      style: TextStyle(
                         color: Colors.white, 
                         fontSize: 18, 
                         fontWeight: FontWeight.bold
                       ),
                     ),
-                    const SizedBox(height: 4),
                     Text(
-                      user?['role']?.toUpperCase() ?? 'ADMIN',
-                      style: const TextStyle(
-                        color: Colors.white70, 
-                        fontSize: 12, 
-                        letterSpacing: 1.2
-                      ),
+                      user?['email'] ?? 'admin@gmail.com', // Teks email di bawah nama
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                    const Text(
+                      "Online", // Label status Online
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
                     ),
                   ],
                 ),
                 const CircleAvatar(
                   radius: 25,
-                  backgroundColor: Colors.white24,
-                  child: Icon(Icons.person, color: Colors.white, size: 30),
+                  backgroundColor: Colors.white,
+                  child: Icon(Icons.person, color: Color(0xFF1E4C90), size: 35),
                 )
               ],
             ),
           ),
 
-          // 2. Area Konten (Scrollable)
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(15),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Row Kartu Statistik
+                  // 2. Row Kartu Statistik (Biru dengan Ikon Laptop Putih)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildStatCard("Total Alat", "15", Icons.inventory_2),
-                      _buildStatCard("Dipinjam", "5", Icons.pending_actions),
-                      _buildStatCard("Tersedia", "10", Icons.check_circle_outline),
+                      _buildStatCard("Total Alat", "15"),
+                      _buildStatCard("Dipinjam", "5"),
+                      _buildStatCard("Tersedia", "10"),
                     ],
                   ),
 
-                  const SizedBox(height: 30),
+                  const SizedBox(height: 25),
 
-                  // Bagian Grafik Statistik
-                  const Text(
-                    "Statistik Peminjaman",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold, 
-                      fontSize: 16, 
-                      color: Color(0xFF1E4C90)
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  
+                  // 3. Grafik Peminjaman (Background Biru Gelap)
                   Container(
-                    height: 220,
                     width: double.infinity,
-                    padding: const EdgeInsets.all(20),
+                    padding: const EdgeInsets.all(15),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1E4C90),
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 10,
-                          offset: const Offset(0, 5),
-                        )
-                      ],
+                      borderRadius: BorderRadius.circular(10),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          "Aktivitas 7 Hari Terakhir", 
-                          style: TextStyle(color: Colors.white70, fontSize: 12)
-                        ),
-                        const Spacer(),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text(
+                              "Grafik Peminjaman",
+                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                            ),
+                            const Text(
+                              "Total Peminjaman Bulan ini:",
+                              style: TextStyle(color: Colors.white70, fontSize: 9),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        // Tab Hari/Minggu/Bulan kecil
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: const Text("Hari   Minggu   Bulan", style: TextStyle(fontSize: 10, color: Color(0xFF1E4C90))),
+                        ),
+                        const SizedBox(height: 20),
+                        // Bar Chart Putih
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           crossAxisAlignment: CrossAxisAlignment.end,
-                          children: List.generate(7, (index) => _buildBarChart(index)),
+                          children: [
+                            _buildBarChart("Jan", 20),
+                            _buildBarChart("Feb", 40),
+                            _buildBarChart("Mar", 30),
+                            _buildBarChart("Apr", 50),
+                            _buildBarChart("Mei", 70),
+                            _buildBarChart("Jun", 90),
+                            _buildBarChart("Jul", 60),
+                            _buildBarChart("Agu", 40),
+                            _buildBarChart("Sep", 55),
+                            _buildBarChart("Okt", 45),
+                            _buildBarChart("Nov", 30),
+                            _buildBarChart("Des", 25),
+                          ],
                         ),
                       ],
                     ),
@@ -129,64 +136,49 @@ class BerandaPage extends StatelessWidget {
     );
   }
 
-  // Helper Widget untuk Kartu Statistik (Putih)
-  Widget _buildStatCard(String title, String count, IconData icon) {
+  // Widget Kartu Statistik Biru Sesuai Figma
+  Widget _buildStatCard(String title, String count) {
     return Container(
       width: 105,
-      padding: const EdgeInsets.symmetric(vertical: 20),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: Colors.grey.shade200),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05), 
-            blurRadius: 5, 
-            offset: const Offset(0, 2)
-          )
-        ],
+        color: const Color(0xFF1E4C90),
+        borderRadius: BorderRadius.circular(5),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF1E4C90), size: 24),
-          const SizedBox(height: 10),
-          Text(
-            count, 
-            style: const TextStyle(
-              color: Color(0xFF1E4C90), 
-              fontSize: 20, 
-              fontWeight: FontWeight.bold
-            )
-          ),
-          Text(
-            title, 
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 10)
+          Text(title, style: const TextStyle(color: Colors.white, fontSize: 11)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.laptop_chromebook, color: Colors.white, size: 28), // Ikon laptop di Figma
+              const SizedBox(width: 8),
+              Text(
+                count, 
+                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  // Helper Widget untuk Bar Grafik
-  Widget _buildBarChart(int index) {
-    final heights = [50.0, 80.0, 60.0, 100.0, 70.0, 90.0, 55.0];
-    final days = ['S', 'S', 'R', 'K', 'J', 'S', 'M'];
-    
+  // Widget Bar Chart Putih Tipis Sesuai Figma
+  Widget _buildBarChart(String month, double height) {
     return Column(
       children: [
         Container(
-          width: 12,
-          height: heights[index],
+          width: 8,
+          height: height,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(index == 3 ? 1.0 : 0.4), 
-            borderRadius: BorderRadius.circular(10),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(2),
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          days[index], 
-          style: const TextStyle(color: Colors.white, fontSize: 10)
-        ),
+        const SizedBox(height: 5),
+        Text(month, style: const TextStyle(color: Colors.white, fontSize: 8)),
       ],
     );
   }

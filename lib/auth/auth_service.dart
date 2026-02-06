@@ -79,4 +79,6 @@ class AuthService extends ChangeNotifier {
     _isLoading = val;
     notifyListeners();
   }
+
+  Future<void> signOut() async {}
 }
