@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'beranda_admin.dart'; 
-import 'kelola_alat.dart'; // 1. PASTIKAN IMPORT INI ADA
+import 'kelola_alat.dart'; 
 import '../auth/logout.dart'; 
 
 class AdminHomeScreen extends StatefulWidget {
@@ -13,14 +13,14 @@ class AdminHomeScreen extends StatefulWidget {
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _selectedIndex = 0;
 
-  // 2. KATA 'const' DI DEPAN LIST DIHAPUS agar bisa memuat halaman dinamis
- final List<Widget> _pages = [
-  const BerandaPage(),
-  const Center(child: Text("Halaman Pengguna")),
-   // <--- Hapus 'const' nya saja
-  const Center(child: Text("Halaman Riwayat")),
-  const LogoutScreen(),
-];
+  // PERBAIKAN: List harus memiliki 5 item agar sesuai dengan BottomNavigationBar
+  final List<Widget> _pages = [
+    const BerandaPage(),                             // Index 0: Beranda
+    const Center(child: Text("Halaman Pengguna")),   // Index 1: Pengguna
+    const Center(child: Text("Halaman Alat")),       // Index 2: Alat
+    const Center(child: Text("Halaman Riwayat")),    // Index 3: Riwayat
+    const LogoutScreen(),                            // Index 4: Pengaturan (Logout)
+  ];
 
   void _onItemTapped(int index) {
     setState(() {
@@ -31,6 +31,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // Menggunakan IndexedStack agar state halaman tidak hilang saat pindah tab
       body: IndexedStack(
         index: _selectedIndex,
         children: _pages,

@@ -16,9 +16,6 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscureText = true;
   bool _isLoading = false;
 
-  // =====================================
-  // LOGIN FUNCTION (FIXED)
-  // =====================================
   Future<void> _handleLogin() async {
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.trim().isEmpty) {
@@ -35,7 +32,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     final authService = Provider.of<AuthService>(context, listen: false);
 
-    /// 🔥 SEKARANG LOGIN RETURN ROLE
     final String? role = await authService.login(
       _emailController.text.trim(),
       _passwordController.text.trim(),
@@ -45,20 +41,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoading = false);
 
-    // =====================================
-    // NAVIGASI BERDASARKAN ROLE
-    // =====================================
     if (role == 'admin') {
       Navigator.pushReplacementNamed(context, '/admin_home');
-
     } else if (role == 'petugas') {
       Navigator.pushReplacementNamed(context, '/petugas_home');
-
     } else if (role == 'peminjam') {
       Navigator.pushReplacementNamed(context, '/peminjam_home');
-
     } else {
-      /// selain 3 role = error message dari AuthService
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(role ?? "Login gagal"),
@@ -68,9 +57,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // =====================================
-  // UI
-  // =====================================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -78,33 +64,36 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            _buildHeader(),
+            _buildHeader(), // Header dengan fokus logo saja
             const SizedBox(height: 40),
-
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 30),
               child: Column(
                 children: [
                   const Text(
-                    "Welcome to MyBrantas",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                    "Selamat Datang di MyBrantas",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   const Text(
-                    "Temukan kebutuhan peminjaman perangkat digitalmu.",
+                    "Temukan kebutuhan peminjaman perangkat digitalmu di MyBrantas bersama teman-teman kamu",
                     textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.grey, fontSize: 15),
                   ),
                   const SizedBox(height: 40),
 
                   // EMAIL
                   TextField(
                     controller: _emailController,
-                    decoration: const InputDecoration(
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
                       labelText: "Email",
-                      border: OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.email_outlined),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                     ),
                   ),
-
                   const SizedBox(height: 20),
 
                   // PASSWORD
@@ -113,38 +102,46 @@ class _LoginScreenState extends State<LoginScreen> {
                     obscureText: _obscureText,
                     decoration: InputDecoration(
                       labelText: "Sandi",
-                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscureText
-                              ? Icons.visibility_off
-                              : Icons.visibility,
+                          _obscureText ? Icons.visibility_off : Icons.visibility,
                         ),
-                        onPressed: () =>
-                            setState(() => _obscureText = !_obscureText),
+                        onPressed: () => setState(() => _obscureText = !_obscureText),
                       ),
                     ),
                   ),
-
                   const SizedBox(height: 40),
 
-                  // BUTTON
+                  // BUTTON MASUK
                   SizedBox(
                     width: double.infinity,
-                    height: 50,
+                    height: 55,
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _handleLogin,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: const Color(0xFF1E4C90),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 2,
                       ),
                       child: _isLoading
                           ? const CircularProgressIndicator(color: Colors.white)
                           : const Text(
                               "MASUK",
-                              style: TextStyle(color: Colors.white),
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
                             ),
                     ),
                   ),
+                  const SizedBox(height: 30),
                 ],
               ),
             ),
@@ -154,41 +151,33 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // =====================================
-  // HEADER UI
-  // =====================================
   Widget _buildHeader() {
+    double screenWidth = MediaQuery.of(context).size.width;
+
     return Stack(
       alignment: Alignment.center,
       children: [
+        // Background Biru Melengkung
         Container(
-          height: 320,
+          height: 360,
           decoration: const BoxDecoration(
             color: Color(0xFF1E4C90),
             borderRadius: BorderRadius.only(
-              bottomLeft: Radius.circular(160),
-              bottomRight: Radius.circular(160),
+              bottomLeft: Radius.circular(100),
+              bottomRight: Radius.circular(100),
             ),
           ),
         ),
-        const Positioned(
-          top: 80,
-          child: Column(
-            children: [
-              CircleAvatar(
-                radius: 50,
-                child: Icon(Icons.devices_other, size: 60),
-              ),
-              SizedBox(height: 10),
-              Text(
-                "MY BRANTAS ID",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
-            ],
+        // Logo diletakkan di tengah background biru
+        Positioned(
+          top: 80, 
+          child: Container(
+            width: screenWidth * 0.65, // Logo diperbesar (65% lebar layar)
+            constraints: const BoxConstraints(maxWidth: 250), // Batas maksimal logo
+            child: Image.asset(
+              'assets/images/logo.png', 
+              fit: BoxFit.contain,
+            ),
           ),
         ),
       ],
