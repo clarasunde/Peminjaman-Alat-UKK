@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'beranda.dart'; 
+import 'beranda_admin.dart'; 
 import 'kelola_alat.dart'; // 1. PASTIKAN IMPORT INI ADA
 import '../auth/logout.dart'; 
 
