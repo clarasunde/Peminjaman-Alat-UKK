@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-class HalamanRiwayat extends StatefulWidget {
-  const HalamanRiwayat({super.key});
+class HalamanAdminLog extends StatefulWidget {
+  const HalamanAdminLog({super.key});
 
   @override
-  State<HalamanRiwayat> createState() => _HalamanRiwayatState();
+  State<HalamanAdminLog> createState() => _HalamanAdminLogState();
 }
 
-class _HalamanRiwayatState extends State<HalamanRiwayat> {
+class _HalamanAdminLogState extends State<HalamanAdminLog> {
   final supabase = Supabase.instance.client;
   String _searchQuery = "";
   String _selectedFilter = "Semua";
@@ -18,77 +18,82 @@ class _HalamanRiwayatState extends State<HalamanRiwayat> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF5F7FA),
       body: Column(
         children: [
-          // --- HEADER BIRU ---
+          // --- HEADER ADMIN ---
           Container(
-            padding: const EdgeInsets.only(top: 50, left: 10, right: 10, bottom: 20),
+            padding: const EdgeInsets.only(top: 60, left: 20, right: 20, bottom: 25),
             decoration: const BoxDecoration(
-              color: Color(0xFF1E4C90),
+              gradient: LinearGradient(
+                colors: [Color(0xFF1E4C90), Color(0xFF13366D)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
               borderRadius: BorderRadius.only(
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(20),
+                bottomLeft: Radius.circular(30),
+                bottomRight: Radius.circular(30),
               ),
             ),
             child: Column(
               children: [
-                const Text("Riwayat", 
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 15),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 15),
-                  child: TextField(
-                    onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
-                    decoration: InputDecoration(
-                      hintText: "Cari nama atau alat...",
-                      prefixIcon: const Icon(Icons.search),
-                      fillColor: Colors.white,
-                      filled: true,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                    ),
+                const Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text("Panel Audit Admin", 
+                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+                    Icon(Icons.admin_panel_settings, color: Colors.white70),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                TextField(
+                  onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
+                  decoration: InputDecoration(
+                    hintText: "Cari Peminjam...",
+                    prefixIcon: const Icon(Icons.search, color: Color(0xFF1E4C90)),
+                    fillColor: Colors.white,
+                    filled: true,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                    contentPadding: EdgeInsets.zero,
                   ),
                 ),
               ],
             ),
           ),
 
-          // --- TAB FILTER (Chip) ---
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 15),
-            child: Row(
-              children: _filters.map((filter) {
-                bool isSelected = _selectedFilter == filter;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ChoiceChip(
-                    label: Text(filter),
-                    selected: isSelected,
-                    selectedColor: const Color(0xFF1E4C90),
-                    // --- BAGIAN INI UNTUK MENGHILANGKAN CENTANG ---
-                    showCheckmark: false, 
-                    // ----------------------------------------------
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.white : Colors.black, 
-                      fontSize: 12,
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal
+          // --- FILTER CHIPS ---
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              child: Row(
+                children: _filters.map((filter) {
+                  bool isSelected = _selectedFilter == filter;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ChoiceChip(
+                      label: Text(filter),
+                      selected: isSelected,
+                      selectedColor: const Color(0xFF1E4C90),
+                      onSelected: (_) => setState(() => _selectedFilter = filter),
+                      labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black87),
                     ),
-                    onSelected: (bool selected) {
-                      setState(() => _selectedFilter = filter);
-                    },
-                  ),
-                );
-              }).toList(),
+                  );
+                }).toList(),
+              ),
             ),
           ),
 
-          // --- DAFTAR RIWAYAT ---
+          // --- LIST DATA ---
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: supabase.from('peminjaman').stream(primaryKey: ['id_peminjaman']).order('tanggal_pinjam'),
+              // Tips: Stream hanya bisa satu tabel. 
+              // Untuk nama user, kita akan gunakan widget FutureBuilder di dalam Card atau join logic.
+              stream: supabase.from('peminjaman').stream(primaryKey: ['id_peminjaman'])
+                  .order('tanggal_pinjam'),
               builder: (context, snapshot) {
+                if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
                 final listData = snapshot.data!.where((item) {
@@ -96,15 +101,12 @@ class _HalamanRiwayatState extends State<HalamanRiwayat> {
                   return matchesFilter;
                 }).toList();
 
-                if (listData.isEmpty) return const Center(child: Text("Riwayat tidak ditemukan"));
+                if (listData.isEmpty) return const Center(child: Text("Tidak ada riwayat"));
 
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  padding: const EdgeInsets.all(15),
                   itemCount: listData.length,
-                  itemBuilder: (context, index) {
-                    final item = listData[index];
-                    return _buildRiwayatCard(item);
-                  },
+                  itemBuilder: (context, index) => _buildAdminCard(listData[index]),
                 );
               },
             ),
@@ -114,58 +116,62 @@ class _HalamanRiwayatState extends State<HalamanRiwayat> {
     );
   }
 
-  Widget _buildRiwayatCard(Map<String, dynamic> item) {
-    Color statusColor;
-    switch (item['status'].toString().toLowerCase()) {
-      case 'kembali': statusColor = Colors.green; break;
-      case 'terlambat': statusColor = Colors.red; break;
-      case 'rusak': statusColor = Colors.purple; break;
-      default: statusColor = Colors.orange;
-    }
-
+  Widget _buildAdminCard(Map<String, dynamic> item) {
     return Card(
-      margin: const EdgeInsets.only(bottom: 15),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      elevation: 2,
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(15),
+        side: BorderSide(color: Colors.grey.shade200),
+      ),
+     margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
+        padding: const EdgeInsets.all(15),
+        child: Column(
           children: [
-            Container(
-              width: 50, height: 50,
-              decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.laptop, color: Colors.grey),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text("Nama Peminjam", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  const Text("Nama Alat / Perangkat", style: TextStyle(fontSize: 12, color: Colors.grey)),
-                  const SizedBox(height: 5),
-                  Row(
+            Row(
+              children: [
+                const CircleAvatar(
+                  backgroundColor: Color(0xFFE8EEF7),
+                  child: Icon(Icons.person, color: Color(0xFF1E4C90)),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Icon(Icons.calendar_month, size: 14, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text("${item['tanggal_pinjam']} - ${item['tanggal_kembali'] ?? '...'}", 
-                        style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      // Menggunakan FutureBuilder untuk mengambil Nama User berdasarkan id_user
+                      FutureBuilder(
+                        future: supabase.from('users').select('nama_lengkap').eq('id_user', item['id_user']).single(),
+                        builder: (context, res) {
+                          String nama = res.hasData ? res.data!['nama_lengkap'] : "Memuat...";
+                          return Text(nama, style: const TextStyle(fontWeight: FontWeight.bold));
+                        }
+                      ),
+                      Text("ID Pinjam: #${item['id_peminjaman']}", 
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: statusColor.withOpacity(0.1), borderRadius: BorderRadius.circular(5)),
-                    child: Text(item['status'], 
-                      style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                  ),
-                ],
-              ),
+                ),
+                _buildStatusBadge(item['status']),
+              ],
             ),
-            TextButton.icon(
-              onPressed: () => _confirmDelete(item['id_peminjaman']),
-              icon: const Icon(Icons.delete_outline, color: Colors.red, size: 18),
-              label: const Text("Hapus", style: TextStyle(color: Colors.red, fontSize: 12)),
+            const Divider(height: 25),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
+                    const SizedBox(width: 5),
+                    Text(item['tanggal_pinjam'].toString().substring(0, 10), style: const TextStyle(fontSize: 12)),
+                  ],
+                ),
+                // Tombol Hapus dengan Audit Log
+                IconButton(
+                  onPressed: () => _confirmDelete(item),
+                  icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+                )
+              ],
             )
           ],
         ),
@@ -173,35 +179,53 @@ class _HalamanRiwayatState extends State<HalamanRiwayat> {
     );
   }
 
-  void _confirmDelete(id) {
+  Widget _buildStatusBadge(String status) {
+    Color color = Colors.orange;
+    if (status == 'Kembali') color = Colors.green;
+    if (status == 'Terlambat') color = Colors.red;
+    if (status == 'Rusak') color = Colors.purple;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
+      child: Text(status, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+    );
+  }
+
+  void _confirmDelete(Map<String, dynamic> item) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        title: const Column(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red, size: 50),
-            SizedBox(height: 10),
-            Text("Hapus Riwayat?", style: TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: const Text("Data riwayat akan dihapus permanen.", textAlign: TextAlign.center),
-        actionsAlignment: MainAxisAlignment.center,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Konfirmasi Audit"),
+        content: const Text("Menghapus riwayat ini akan dicatat dalam Log Aktivitas Admin. Lanjutkan?"),
         actions: [
-          OutlinedButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Batal"),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Batal")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
-              await supabase.from('peminjaman').delete().eq('id_peminjaman', id);
-              if (mounted) Navigator.pop(context);
-            },
-            child: const Text("Ya, Hapus", style: TextStyle(color: Colors.white)),
+              try {
+                // 1. Catat ke Log Aktivitas secara manual sebelum hapus (Atau via Database Trigger)
+                await supabase.from('log_aktivitas').insert({
+                  'id_user': supabase.auth.currentUser!.id,
+                  'aksi': 'Hapus Riwayat',
+                  'keterangan': 'Admin menghapus peminjaman ID #${item['id_peminjaman']}',
+                });
+
+                // 2. Hapus data
+                await supabase.from('peminjaman').delete().eq('id_peminjaman', item['id_peminjaman']);
+                
+                if (mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Riwayat berhasil dihapus & dicatat log")));
+                }
+              } catch (e) {
+                print(e);
+              }
+            }, 
+            child: const Text("Hapus & Catat Log", style: TextStyle(color: Colors.white))
           ),
         ],
-      ),
+      )
     );
   }
 }

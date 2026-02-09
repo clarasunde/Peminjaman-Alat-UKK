@@ -1,8 +1,8 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb; 
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:path/path.dart' as p;
 
 class FormAlatPage extends StatefulWidget {
   final Map<String, dynamic>? alat;
@@ -22,47 +22,69 @@ class _FormAlatPageState extends State<FormAlatPage> {
   late TextEditingController stok;
   late TextEditingController spesifikasi;
 
-  File? imageFile;
+  XFile? imageFile; 
   String? imageUrl;
   int? selectedKategori;
+  
+  // Default kondisi untuk alat baru adalah 'tersedia'
+  String selectedKondisi = "tersedia"; 
 
   final picker = ImagePicker();
   bool loading = false;
 
-  // ================= INIT =================
   @override
   void initState() {
     super.initState();
-
     nama = TextEditingController(text: widget.alat?['nama_alat'] ?? "");
     stok = TextEditingController(text: widget.alat?['stok']?.toString() ?? "");
-    spesifikasi =
-        TextEditingController(text: widget.alat?['spesifikasi_alat'] ?? "");
+    spesifikasi = TextEditingController(text: widget.alat?['spesifikasi_alat'] ?? "");
 
     imageUrl = widget.alat?['gambar_alat'];
     selectedKategori = widget.alat?['id_kategori'];
+    
+    // Jika sedang edit, ambil kondisi dari database. Jika tambah baru, default 'tersedia'.
+    selectedKondisi = widget.alat?['kondisi'] ?? "tersedia";
   }
 
-  // ================= PICK IMAGE =================
   Future<void> pickImage() async {
     final file = await picker.pickImage(source: ImageSource.gallery);
-    if (file != null) setState(() => imageFile = File(file.path));
+    if (file != null) {
+      setState(() => imageFile = file);
+    }
   }
 
-  // ================= SAVE =================
   Future<void> save() async {
+    if (nama.text.isEmpty || stok.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Nama dan Stok wajib diisi!")),
+      );
+      return;
+    }
+
     setState(() => loading = true);
 
     try {
       String url = imageUrl ?? "";
 
+      // 1. PROSES UPLOAD KE BUCKET 'alat-images'
       if (imageFile != null) {
-        final ext = p.extension(imageFile!.path);
-        final name = "alat_${DateTime.now().millisecondsSinceEpoch}$ext";
+        final bytes = await imageFile!.readAsBytes(); 
+        final fileExt = imageFile!.path.split('.').last.toLowerCase();
+        final actualExt = ['jpg', 'jpeg', 'png'].contains(fileExt) ? fileExt : 'jpg';
+        final fileName = "alat_${DateTime.now().millisecondsSinceEpoch}.$actualExt";
 
-        await supabase.storage.from('alat-images').upload(name, imageFile!);
-        url = supabase.storage.from('alat-images').getPublicUrl(name);
+        await supabase.storage.from('alat-images').uploadBinary(
+              fileName,
+              bytes,
+              fileOptions: FileOptions(contentType: 'image/$actualExt'),
+            );
+            
+        url = supabase.storage.from('alat-images').getPublicUrl(fileName);
       }
+
+      // 2. LOGIKA KETERSEDIAAN BERDASARKAN KONDISI (ENUM)
+      // Jika kondisi 'tersedia', ketersediaan = true. Selain itu false.
+      bool isAvailable = selectedKondisi == "tersedia";
 
       final data = {
         "nama_alat": nama.text,
@@ -70,8 +92,11 @@ class _FormAlatPageState extends State<FormAlatPage> {
         "spesifikasi_alat": spesifikasi.text,
         "id_kategori": selectedKategori,
         "gambar_alat": url,
+        "kondisi": selectedKondisi, // Menggunakan Enum: tersedia, dipinjam, diperbaiki
+        "ketersediaan": isAvailable, // Otomatis True jika tersedia
       };
 
+      // 3. OPERASI DATABASE
       if (widget.alat == null) {
         await supabase.from('alat').insert(data);
       } else {
@@ -81,26 +106,26 @@ class _FormAlatPageState extends State<FormAlatPage> {
             .eq('id_alat', widget.alat!['id_alat']);
       }
 
-      Navigator.pop(context, true);
+      if (mounted) Navigator.pop(context, true);
     } catch (e) {
-      debugPrint(e.toString());
+      debugPrint("Error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Gagal menyimpan data: $e")),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => loading = false);
     }
-
-    setState(() => loading = false);
   }
 
-  // ================= UI =================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey[100],
-
       body: Column(
         children: [
-
-          // =================================================
-          // 🔵 HEADER BIRU
-          // =================================================
+          // Header Biru
           Container(
             height: 95,
             padding: const EdgeInsets.only(top: 50),
@@ -112,10 +137,8 @@ class _FormAlatPageState extends State<FormAlatPage> {
               onPressed: () => Navigator.pop(context),
             ),
           ),
-
-          // =================================================
-          // ⚪ HEADER PUTIH (TITLE)
-          // =================================================
+          
+          // Header Putih
           Container(
             height: 55,
             padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -123,22 +146,15 @@ class _FormAlatPageState extends State<FormAlatPage> {
             decoration: BoxDecoration(
               color: Colors.white,
               boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.06),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3),
-                )
+                BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 6, offset: const Offset(0, 3))
               ],
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  "Edit Alat",
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                  ),
+                Text(
+                  widget.alat == null ? "Tambah Alat" : "Edit Alat",
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                 ),
                 GestureDetector(
                   onTap: () => Navigator.pop(context),
@@ -148,68 +164,38 @@ class _FormAlatPageState extends State<FormAlatPage> {
             ),
           ),
 
-          // =================================================
-          // 🔥 FORM AREA
-          // =================================================
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 26),
               child: Column(
                 children: [
-
                   const SizedBox(height: 20),
-
-                  // =================================================
-                  // 🔥 FOTO 189x188 + SHADOW
-                  // =================================================
+                  
+                  // AREA FOTO
                   GestureDetector(
                     onTap: pickImage,
                     child: Container(
-                      width: 189,
-                      height: 188,
-                      alignment: Alignment.center,
+                      width: 189, height: 188,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(color: blue, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.08),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          )
-                        ],
                       ),
-                      child: imageFile != null
-                          ? Image.file(imageFile!, fit: BoxFit.contain)
-                          : (imageUrl != null && imageUrl != "")
-                              ? Image.network(imageUrl!, fit: BoxFit.contain)
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.add_a_photo,
-                                        color: blue, size: 40),
-                                    const SizedBox(height: 6),
-                                    Text(
-                                      "Upload Gambar",
-                                      style: TextStyle(
-                                        color: blue,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: _buildImageWidget(),
+                      ),
                     ),
                   ),
 
                   const SizedBox(height: 35),
-
                   _input("Nama", nama),
                   _input("Stok", stok, number: true),
                   _input("Spesifikasi", spesifikasi, lines: 3),
 
                   const SizedBox(height: 18),
-
+                  
+                  // DROPDOWN KATEGORI
                   DropdownButtonFormField<int>(
                     value: selectedKategori,
                     decoration: _decoration("Kategori"),
@@ -221,50 +207,28 @@ class _FormAlatPageState extends State<FormAlatPage> {
                     onChanged: (v) => setState(() => selectedKategori = v),
                   ),
 
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 18),
 
-                  // =================================================
-                  // 🔥 BUTTON FIX SIZE (PERSIS MOCKUP)
-                  // =================================================
+                  // DROPDOWN KONDISI (ENUM)
+                  DropdownButtonFormField<String>(
+                    value: selectedKondisi,
+                    decoration: _decoration("Kondisi Alat"),
+                    items: const [
+                      DropdownMenuItem(value: "tersedia", child: Text("Tersedia")),
+                      DropdownMenuItem(value: "dipinjam", child: Text("Dipinjam")),
+                      DropdownMenuItem(value: "diperbaiki", child: Text("Sedang Diperbaiki")),
+                    ],
+                    onChanged: (v) => setState(() => selectedKondisi = v!),
+                  ),
+
+                  const SizedBox(height: 40),
+                  
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-
-                      // BATAL
-                      SizedBox(
-                        width: 113,
-                        height: 44,
-                        child: OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(color: Colors.grey.shade400),
-                            backgroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          onPressed: () => Navigator.pop(context),
-                          child: const Text("Batal"),
-                        ),
-                      ),
-
+                      _btnBatal(),
                       const SizedBox(width: 14),
-
-                      // SIMPAN
-                      SizedBox(
-                        width: 199,
-                        height: 44,
-                        child: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: blue,
-                            foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                          ),
-                          onPressed: loading ? null : save,
-                          child: const Text("Simpan Perubahan"),
-                        ),
-                      ),
+                      _btnSimpan(),
                     ],
                   ),
                 ],
@@ -276,9 +240,58 @@ class _FormAlatPageState extends State<FormAlatPage> {
     );
   }
 
-  // ================= INPUT =================
-  Widget _input(String label, TextEditingController c,
-      {bool number = false, int lines = 1}) {
+  // --- UI HELPERS ---
+
+  Widget _buildImageWidget() {
+    if (imageFile != null) {
+      return kIsWeb 
+        ? Image.network(imageFile!.path, fit: BoxFit.cover) 
+        : Image.file(File(imageFile!.path), fit: BoxFit.cover);
+    }
+    if (imageUrl != null && imageUrl != "") {
+      return Image.network(imageUrl!, fit: BoxFit.cover);
+    }
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(Icons.add_a_photo, color: blue, size: 40),
+        const SizedBox(height: 6),
+        Text("Upload Gambar", style: TextStyle(color: blue, fontSize: 12)),
+      ],
+    );
+  }
+
+  Widget _btnBatal() {
+    return SizedBox(
+      width: 113, height: 44,
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: Colors.grey.shade400),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+        onPressed: () => Navigator.pop(context),
+        child: const Text("Batal"),
+      ),
+    );
+  }
+
+  Widget _btnSimpan() {
+    return SizedBox(
+      width: 199, height: 44,
+      child: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: blue, foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        ),
+        onPressed: loading ? null : save,
+        child: loading 
+          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+          : const Text("Simpan Perubahan"),
+      ),
+    );
+  }
+
+  Widget _input(String label, TextEditingController c, {bool number = false, int lines = 1}) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
@@ -292,12 +305,8 @@ class _FormAlatPageState extends State<FormAlatPage> {
 
   InputDecoration _decoration(String label) {
     return InputDecoration(
-      labelText: label,
-      filled: true,
-      fillColor: Colors.white,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(6),
-      ),
+      labelText: label, filled: true, fillColor: Colors.white,
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
     );
   }
 }
