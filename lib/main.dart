@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_application_1/peminjam/peminjam.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 
+// Import Service dan Screen
 import 'auth/auth_service.dart';
 import 'auth/login.dart';
 import 'admin/admin_home.dart';
+import 'petugas/petugas.dart'; // Ini penting agar PetugasPage terbaca
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,34 +42,11 @@ class MyApp extends StatelessWidget {
         routes: {
           '/': (_) => const LoginScreen(),
           '/admin_home': (_) => const AdminHomeScreen(),
-          '/petugas_home': (_) => const PetugasDashboard(),
-          '/peminjam_home': (_) => const PeminjamDashboard(),
+          // DIUBAH: Sekarang mengarah ke PetugasPage di petugas.dart
+          '/petugas_home': (_) => const PetugasPage(), 
+          '/peminjam_home': (_) => const PeminjamPage(),
         },
       ),
-    );
-  }
-}
-
-class PetugasDashboard extends StatelessWidget {
-  const PetugasDashboard({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Petugas")),
-      body: const Center(child: Text("Halaman Petugas")),
-    );
-  }
-}
-
-class PeminjamDashboard extends StatelessWidget {
-  const PeminjamDashboard({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Peminjam")),
-      body: const Center(child: Text("Halaman Peminjam")),
     );
   }
 }

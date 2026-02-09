@@ -99,9 +99,8 @@ class _AlatPageState extends State<AlatPage> {
     );
   }
 
-  // ======================================================
+  
   // CARD ALAT
-  // ======================================================
   Widget alatCard(Map<String, dynamic> alat) {
     final gambar = alat['gambar_alat'] ?? "";
 

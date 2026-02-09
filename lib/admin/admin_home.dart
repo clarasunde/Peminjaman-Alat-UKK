@@ -3,7 +3,7 @@ import 'package:flutter_application_1/admin/pengguna_page.dart';
 import 'package:provider/provider.dart';
 import '../auth/auth_service.dart';
 import '../auth/logout.dart';
-// Import halaman lain tetap dipertahankan
+
 import 'alat_page.dart'; 
 import 'pengguna.dart';
 import 'riwayat.dart';
@@ -24,13 +24,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Mengambil data user untuk Beranda
+    // ambil data user untuk Beranda
     final authService = Provider.of<AuthService>(context);
     final user = authService.userData;
 
     // List halaman sekarang berisi fungsi internal untuk index 0
     final List<Widget> _pages = [
-      _buildBeranda(user),     // 0: Beranda (Hasil Gabungan)
+      _buildBeranda(user),     // 0: Beranda (gabungan)
       const PenggunaPage(),    // 1: Pengguna
       const AlatPage(),        // 2: Alat
       const HalamanRiwayat(),  // 3: Riwayat
@@ -51,7 +51,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: 'Beranda'),
           BottomNavigationBarItem(icon: Icon(Icons.people_alt_rounded), label: 'Pengguna'),
-          BottomNavigationBarItem(icon: Icon(Icons.inventory_2_rounded), label: 'Alat'),
+          BottomNavigationBarItem(icon: Icon(Icons.computer), label: 'Alat'),
           BottomNavigationBarItem(icon: Icon(Icons.history_rounded), label: 'Riwayat'),
           BottomNavigationBarItem(icon: Icon(Icons.settings_rounded), label: 'Pengaturan'),
         ],

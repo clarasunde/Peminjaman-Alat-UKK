@@ -10,7 +10,7 @@ class LogoutScreen extends StatelessWidget {
     final authService = Provider.of<AuthService>(context);
     final user = authService.userData;
     
-    // Mengambil role untuk header (Admin/Petugas/Peminjam)
+    // Mengambil role header (Admin,Petugas,Peminjam)
     String roleDisplay = user?['role']?.toString().toUpperCase() ?? 'USER';
 
     return Scaffold(
@@ -18,14 +18,13 @@ class LogoutScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E4C90),
         elevation: 0,
-        leading: const Icon(Icons.arrow_back, color: Colors.white),
         title: const Text("Pengaturan", style: TextStyle(color: Colors.white)),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. Header Profil Sesuai Desain Figma
+            // 1. Header Profil
             Container(
               padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
               decoration: const BoxDecoration(
@@ -113,7 +112,7 @@ class LogoutScreen extends StatelessWidget {
     );
   }
 
-  // 4. Dialog Konfirmasi Keluar (Sesuai desain Popup Figma)
+  // Konfirmasi/Validasi Keluar (tombol)
   void _showLogoutDialog(BuildContext context, AuthService authService) {
     showDialog(
       context: context,
