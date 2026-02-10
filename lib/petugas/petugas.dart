@@ -33,6 +33,65 @@ class _PetugasPageState extends State<PetugasPage> {
     });
   }
 
+  // STREAM UNTUK PERMINTAAN TERBARU dari Supabase
+  Stream<List<Map<String, dynamic>>> _getPermintaanTerbaruStream() {
+    return Supabase.instance.client
+        .from('peminjaman')
+        .stream(primaryKey: ['id_peminjaman'])
+        .eq('status', 'menunggu')
+        .order('tanggal_pinjam', ascending: false)
+        .limit(5)
+        .map((data) async {
+          List<Map<String, dynamic>> hasil = [];
+          
+          for (var peminjaman in data) {
+            try {
+              // Ambil data user
+              final user = await Supabase.instance.client
+                  .from('users')
+                  .select('nama, email')
+                  .eq('id_user', peminjaman['id_user'])
+                  .maybeSingle();
+
+              // Ambil detail peminjaman pertama (untuk dapat id_alat)
+              final detailPeminjaman = await Supabase.instance.client
+                  .from('detail_peminjaman')
+                  .select('id_alat, jumlah')
+                  .eq('id_peminjaman', peminjaman['id_peminjaman'])
+                  .limit(1)
+                  .maybeSingle();
+
+              String namaAlat = 'Alat tidak tersedia';
+              if (detailPeminjaman != null) {
+                // Ambil nama alat
+                final alat = await Supabase.instance.client
+                    .from('alat')
+                    .select('nama_alat')
+                    .eq('id_alat', detailPeminjaman['id_alat'])
+                    .maybeSingle();
+                
+                if (alat != null) {
+                  namaAlat = alat['nama_alat'];
+                }
+              }
+
+              hasil.add({
+                'id_peminjaman': peminjaman['id_peminjaman'],
+                'nama': user?['nama'] ?? 'User tidak diketahui',
+                'email': user?['email'] ?? '',
+                'nama_alat': namaAlat,
+                'tanggal_pinjam': peminjaman['tanggal_pinjam'],
+              });
+            } catch (e) {
+              print('Error fetching data: $e');
+            }
+          }
+          
+          return hasil;
+        })
+        .asyncMap((future) => future);
+  }
+
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
@@ -135,9 +194,44 @@ class _PetugasPageState extends State<PetugasPage> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 15),
 
-                // 3. Item List (Statis sementara, bisa di-Stream seperti Statistik)
-                _buildRequestItem("Aisyah Najwa", "aisyah@gmail.com", "ASUS Zenbook S 13 (UM5606)", "12/01/2026"),
-                _buildRequestItem("Rara Aramita", "rara@gmail.com", "Canon Camera US 24.2", "12/01/2026"),
+                // 3. PERMINTAAN TERBARU - REAL-TIME dari Supabase
+                StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _getPermintaanTerbaruStream(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text('Error: ${snapshot.error}'),
+                      );
+                    }
+
+                    final permintaan = snapshot.data ?? [];
+
+                    if (permintaan.isEmpty) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: Text('Tidak ada permintaan baru',
+                              style: TextStyle(color: Colors.grey)),
+                        ),
+                      );
+                    }
+
+                    return Column(
+                      children: permintaan.map((item) {
+                        return _buildRequestItem(
+                          item['nama'],
+                          item['email'],
+                          item['nama_alat'],
+                          _formatTanggal(item['tanggal_pinjam']),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
 
                 const SizedBox(height: 25),
 
@@ -162,6 +256,17 @@ class _PetugasPageState extends State<PetugasPage> {
         ),
       ],
     );
+  }
+
+  // Helper function untuk format tanggal
+  String _formatTanggal(String? tanggal) {
+    if (tanggal == null) return '-';
+    try {
+      final date = DateTime.parse(tanggal);
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    } catch (e) {
+      return tanggal;
+    }
   }
 
   Widget _buildRequestItem(String name, String email, String device, String date) {
@@ -198,12 +303,14 @@ class _PetugasPageState extends State<PetugasPage> {
               children: [
                 const Icon(Icons.laptop, size: 40, color: Colors.grey),
                 const SizedBox(width: 12),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(device, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-                    Text(date, style: const TextStyle(fontSize: 11, color: Colors.grey)),
-                  ],
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(device, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                      Text(date, style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                    ],
+                  ),
                 )
               ],
             )

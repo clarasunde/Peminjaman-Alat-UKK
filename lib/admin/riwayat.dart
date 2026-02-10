@@ -13,7 +13,8 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
   String _searchQuery = "";
   String _selectedFilter = "Semua";
 
-  final List<String> _filters = ["Semua", "Dipinjam", "Kembali", "Terlambat", "Rusak"];
+  // Filter disesuaikan dengan status di Supabase
+  final List<String> _filters = ["Semua", "Menunggu", "Disetujui", "Ditolak", "Selesai"];
 
   @override
   Widget build(BuildContext context) {
@@ -42,14 +43,14 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
                   children: [
                     Text("Panel Audit Admin", 
                       style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    Icon(Icons.admin_panel_settings, color: Colors.white70),
+                    Icon(Icons.history_edu, color: Colors.white70),
                   ],
                 ),
                 const SizedBox(height: 20),
                 TextField(
                   onChanged: (val) => setState(() => _searchQuery = val.toLowerCase()),
                   decoration: InputDecoration(
-                    hintText: "Cari Peminjam...",
+                    hintText: "Cari Nama Peminjam...",
                     prefixIcon: const Icon(Icons.search, color: Color(0xFF1E4C90)),
                     fillColor: Colors.white,
                     filled: true,
@@ -61,7 +62,7 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
             ),
           ),
 
-          // --- FILTER CHIPS ---
+          // --- FILTER CHIPS (Tanpa Ikon Centang) ---
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 10),
             child: SingleChildScrollView(
@@ -75,9 +76,20 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
                     child: ChoiceChip(
                       label: Text(filter),
                       selected: isSelected,
+                      showCheckmark: false, // Menghilangkan ikon centang di dalam kotak
                       selectedColor: const Color(0xFF1E4C90),
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        side: BorderSide(
+                          color: isSelected ? Colors.transparent : Colors.grey.shade300,
+                        ),
+                      ),
                       onSelected: (_) => setState(() => _selectedFilter = filter),
-                      labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.black87),
+                      labelStyle: TextStyle(
+                        color: isSelected ? Colors.white : Colors.black87,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      ),
                     ),
                   );
                 }).toList(),
@@ -88,23 +100,28 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
           // --- LIST DATA ---
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              // Tips: Stream hanya bisa satu tabel. 
-              // Untuk nama user, kita akan gunakan widget FutureBuilder di dalam Card atau join logic.
-              stream: supabase.from('peminjaman').stream(primaryKey: ['id_peminjaman'])
-                  .order('tanggal_pinjam'),
+              stream: supabase
+                  .from('peminjaman')
+                  .stream(primaryKey: ['id_peminjaman'])
+                  .order('tanggal_pinjam', ascending: false),
               builder: (context, snapshot) {
                 if (snapshot.hasError) return Center(child: Text("Error: ${snapshot.error}"));
                 if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
 
                 final listData = snapshot.data!.where((item) {
-                  bool matchesFilter = _selectedFilter == "Semua" || item['status'] == _selectedFilter;
-                  return matchesFilter;
+                  final statusDb = item['status'].toString().toLowerCase();
+                  final filterLower = _selectedFilter.toLowerCase();
+                  
+                  bool matchesFilter = _selectedFilter == "Semua" || statusDb == filterLower;
+                  bool matchesSearch = item['id_peminjaman'].toString().contains(_searchQuery);
+                  
+                  return matchesFilter && matchesSearch;
                 }).toList();
 
                 if (listData.isEmpty) return const Center(child: Text("Tidak ada riwayat"));
 
                 return ListView.builder(
-                  padding: const EdgeInsets.all(15),
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
                   itemCount: listData.length,
                   itemBuilder: (context, index) => _buildAdminCard(listData[index]),
                 );
@@ -123,7 +140,7 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
         borderRadius: BorderRadius.circular(15),
         side: BorderSide(color: Colors.grey.shade200),
       ),
-     margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 12),
       child: Padding(
         padding: const EdgeInsets.all(15),
         child: Column(
@@ -139,12 +156,13 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Menggunakan FutureBuilder untuk mengambil Nama User berdasarkan id_user
                       FutureBuilder(
-                        future: supabase.from('users').select('nama_lengkap').eq('id_user', item['id_user']).single(),
+                        future: supabase.from('users').select('nama').eq('id_user', item['id_user']).single(),
                         builder: (context, res) {
-                          String nama = res.hasData ? res.data!['nama_lengkap'] : "Memuat...";
-                          return Text(nama, style: const TextStyle(fontWeight: FontWeight.bold));
+                          if (res.hasData) {
+                            return Text(res.data!['nama'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16));
+                          }
+                          return const Text("Memuat...", style: TextStyle(color: Colors.grey));
                         }
                       ),
                       Text("ID Pinjam: #${item['id_peminjaman']}", 
@@ -163,13 +181,16 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
                   children: [
                     const Icon(Icons.calendar_today, size: 16, color: Colors.grey),
                     const SizedBox(width: 5),
-                    Text(item['tanggal_pinjam'].toString().substring(0, 10), style: const TextStyle(fontSize: 12)),
+                    Text(
+                      item['tanggal_pinjam']?.toString().substring(0, 10) ?? "-", 
+                      style: const TextStyle(fontSize: 12)
+                    ),
                   ],
                 ),
-                // Tombol Hapus dengan Audit Log
                 IconButton(
                   onPressed: () => _confirmDelete(item),
-                  icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                  visualDensity: VisualDensity.compact,
                 )
               ],
             )
@@ -180,15 +201,26 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
   }
 
   Widget _buildStatusBadge(String status) {
-    Color color = Colors.orange;
-    if (status == 'Kembali') color = Colors.green;
-    if (status == 'Terlambat') color = Colors.red;
-    if (status == 'Rusak') color = Colors.purple;
+    status = status.toLowerCase();
+    Color color = Colors.grey;
+    
+    // Penyesuaian warna berdasarkan status yang diminta
+    if (status.contains('menunggu')) color = Colors.orange;
+    if (status.contains('disetujui')) color = Colors.green;
+    if (status.contains('ditolak')) color = Colors.red;
+    if (status.contains('selesai')) color = Colors.blue;
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(20)),
-      child: Text(status, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1), 
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3))
+      ),
+      child: Text(
+        status.toUpperCase(), 
+        style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)
+      ),
     );
   }
 
@@ -196,33 +228,21 @@ class _HalamanAdminLogState extends State<HalamanAdminLog> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Konfirmasi Audit"),
-        content: const Text("Menghapus riwayat ini akan dicatat dalam Log Aktivitas Admin. Lanjutkan?"),
+        title: const Text("Hapus Riwayat?"),
+        content: const Text("Data ini akan dihapus permanen dari riwayat peminjaman."),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Batal")),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () async {
               try {
-                // 1. Catat ke Log Aktivitas secara manual sebelum hapus (Atau via Database Trigger)
-                await supabase.from('log_aktivitas').insert({
-                  'id_user': supabase.auth.currentUser!.id,
-                  'aksi': 'Hapus Riwayat',
-                  'keterangan': 'Admin menghapus peminjaman ID #${item['id_peminjaman']}',
-                });
-
-                // 2. Hapus data
                 await supabase.from('peminjaman').delete().eq('id_peminjaman', item['id_peminjaman']);
-                
-                if (mounted) {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Riwayat berhasil dihapus & dicatat log")));
-                }
+                if (mounted) Navigator.pop(ctx);
               } catch (e) {
-                print(e);
+                debugPrint(e.toString());
               }
             }, 
-            child: const Text("Hapus & Catat Log", style: TextStyle(color: Colors.white))
+            child: const Text("Hapus", style: TextStyle(color: Colors.white))
           ),
         ],
       )

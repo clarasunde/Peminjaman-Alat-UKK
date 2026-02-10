@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/alat_model.dart';
 import 'alat.dart'; // Sesuaikan dengan nama file form alat Anda
 import 'kategori_page.dart';  // Import halaman daftar kategori yang baru
 

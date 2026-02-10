@@ -96,6 +96,7 @@ class _PengajuanAlatScreenState extends State<PengajuanAlatScreen> {
       appBar: AppBar(
         title: const Text("Pengajuan Alat", style: TextStyle(color: Colors.white)),
         backgroundColor: const Color(0xFF1E4C90),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Column(
         children: [
@@ -103,14 +104,45 @@ class _PengajuanAlatScreenState extends State<PengajuanAlatScreen> {
             child: ListView(
               padding: const EdgeInsets.all(16),
               children: [
-                // List Barang Ringkasan
-                ...widget.items.map((item) => ListTile(
-                  leading: const Icon(Icons.inventory_2, color: Color(0xFF1E4C90)),
-                  title: Text(item['nama_alat']),
-                  subtitle: const Text("Kondisi awal baik"),
-                  trailing: Text("${item['jumlah_pinjam']} Unit"),
+                // List Barang Ringkasan dengan Gambar
+                ...widget.items.map((item) => Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  elevation: 2,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: ListTile(
+                    contentPadding: const EdgeInsets.all(12),
+                    leading: _buildImageWidget(item),
+                    title: Text(
+                      item['nama_alat'] ?? 'Nama Alat',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      "Kondisi awal baik",
+                      style: TextStyle(fontSize: 13),
+                    ),
+                    trailing: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E4C90).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        "${item['jumlah_pinjam']} Unit",
+                        style: const TextStyle(
+                          color: Color(0xFF1E4C90),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
                 )),
-                const Divider(),
+                const Divider(height: 30, thickness: 1),
                 
                 // Input Tanggal Pinjam
                 _buildDateTile("Tanggal Pinjam", tanggalPinjam, true),
@@ -128,17 +160,95 @@ class _PengajuanAlatScreenState extends State<PengajuanAlatScreen> {
               width: double.infinity,
               height: 50,
               child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E4C90)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E4C90),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
                 onPressed: isLoading ? null : _kirimPengajuan,
                 child: isLoading 
                   ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text("KIRIM PENGAJUAN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  : const Text(
+                      "KIRIM PENGAJUAN", 
+                      style: TextStyle(
+                        color: Colors.white, 
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
               ),
             ),
           )
         ],
       ),
     );
+  }
+
+  // Widget untuk menampilkan gambar dari Supabase atau icon fallback
+  Widget _buildImageWidget(Map<String, dynamic> item) {
+    final String? imageUrl = item['gambar_alat'];
+    
+    if (imageUrl != null && imageUrl.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Image.network(
+          imageUrl,
+          width: 60,
+          height: 60,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) {
+            // Jika gambar gagal load, tampilkan icon
+            return Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E4C90).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.inventory_2, 
+                color: Color(0xFF1E4C90), 
+                size: 35,
+              ),
+            );
+          },
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) return child;
+            // Tampilkan loading indicator saat gambar sedang dimuat
+            return Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: Colors.grey.shade200,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Center(
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Color(0xFF1E4C90),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    } else {
+      // Jika tidak ada URL gambar, tampilkan icon
+      return Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E4C90).withOpacity(0.1),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Icon(
+          Icons.inventory_2, 
+          color: Color(0xFF1E4C90), 
+          size: 35,
+        ),
+      );
+    }
   }
 
   Widget _buildDateTile(String label, DateTime? date, bool isPinjam) {
