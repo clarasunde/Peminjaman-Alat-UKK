@@ -7,7 +7,8 @@ import 'package:provider/provider.dart';
 import 'auth/auth_service.dart';
 import 'auth/login.dart';
 import 'admin/admin_home.dart';
-import 'petugas/petugas.dart'; // Ini penting agar PetugasPage terbaca
+import 'petugas/petugas.dart';
+import 'peminjam/peminjam.dart'; // Ini penting agar PetugasPage terbaca
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

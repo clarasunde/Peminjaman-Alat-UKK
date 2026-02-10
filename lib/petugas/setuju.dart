@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-// ignore: depend_on_referenced_packages
 import 'package:intl/intl.dart';
 
 class PersetujuanPage extends StatefulWidget {
@@ -10,40 +9,61 @@ class PersetujuanPage extends StatefulWidget {
   State<PersetujuanPage> createState() => _PersetujuanPageState();
 }
 
-class _PersetujuanPageState extends State<PersetujuanPage> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _PersetujuanPageState extends State<PersetujuanPage>
+    with SingleTickerProviderStateMixin {
   final supabase = Supabase.instance.client;
+  late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    // Diubah menjadi 4 jika mengikuti enum awalmu (menunggu, disetujui, ditolak, selesai)
-    // Di sini kita gunakan 3 tab sesuai UI kamu
     _tabController = TabController(length: 3, vsync: this);
   }
 
-  Stream<List<Map<String, dynamic>>> _getPeminjamanStream(String status) {
-    return supabase
-        .from('peminjaman')
-        .stream(primaryKey: ['id_peminjaman'])
-        .eq('status', status);
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  // ✅ Query dengan Join Relasi (Membutuhkan Foreign Key di DB)
+  Future<List<Map<String, dynamic>>> _getPeminjamanData(String status) async {
+    try {
+      final response = await supabase
+          .from('peminjaman')
+          .select('''
+            *,
+            users(nama, email),
+            detail_peminjaman(
+              jumlah,
+              alat(id_alat, nama_alat, gambar_alat)
+            )
+          ''')
+          .eq('status', status)
+          .order('id_peminjaman', ascending: false);
+      
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      // Menampilkan error di console untuk debugging
+      debugPrint("Error Fetching Data: $e");
+      rethrow; 
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Persetujuan", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF1E4C90),
         elevation: 0,
+        title: const Text("Persetujuan", style: TextStyle(color: Colors.white)),
         bottom: TabBar(
           controller: _tabController,
           indicatorColor: Colors.orange,
-          indicatorWeight: 3,
           labelColor: Colors.white,
           unselectedLabelColor: Colors.white70,
           tabs: const [
-            Tab(text: "Perlu Disetujui"),
+            Tab(text: "Menunggu"),
             Tab(text: "Disetujui"),
             Tab(text: "Ditolak"),
           ],
@@ -52,7 +72,7 @@ class _PersetujuanPageState extends State<PersetujuanPage> with SingleTickerProv
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildListTab('menunggu'), // Gunakan huruf kecil sesuai Enum Supabase
+          _buildListTab('menunggu'),
           _buildListTab('disetujui'),
           _buildListTab('ditolak'),
         ],
@@ -61,206 +81,144 @@ class _PersetujuanPageState extends State<PersetujuanPage> with SingleTickerProv
   }
 
   Widget _buildListTab(String status) {
-    return StreamBuilder<List<Map<String, dynamic>>>(
-      stream: _getPeminjamanStream(status),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _getPeminjamanData(status),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Text(
+                "Gagal memuat data relasi.\nPastikan Foreign Key sudah diset di Supabase.\n\nError: ${snapshot.error}",
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Colors.red),
+              ),
+            ),
+          );
+        }
+
+        final data = snapshot.data ?? [];
+        if (data.isEmpty) {
           return const Center(child: Text("Tidak ada permintaan"));
         }
 
-        return ListView.builder(
-          padding: const EdgeInsets.all(16),
-          itemCount: snapshot.data!.length,
-          itemBuilder: (context, index) {
-            final item = snapshot.data![index];
-            return _buildRequestCard(item);
-          },
+        return RefreshIndicator(
+          onRefresh: () async => setState(() {}),
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: data.length,
+            itemBuilder: (_, i) => _buildRequestCard(data[i]),
+          ),
         );
       },
     );
   }
 
   Widget _buildRequestCard(Map<String, dynamic> item) {
+    final user = item['users'] ?? {};
+    final List details = item['detail_peminjaman'] ?? [];
+    
+    // Validasi jika detail kosong
+    if (details.isEmpty) return const SizedBox();
+
+    final detail = details.first;
+    final alat = detail['alat'] ?? {};
+    final imageUrl = alat['gambar_alat'];
+
+    final tanggal = item['tanggal_pinjam'] != null
+        ? DateFormat('dd/MM/yyyy').format(DateTime.parse(item['tanggal_pinjam']))
+        : '-';
+
     return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 14),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 3,
       child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                const CircleAvatar(
-                  backgroundColor: Color(0xFF1E4C90),
-                  child: Icon(Icons.person, color: Colors.white),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text("Nama Peminjam", style: TextStyle(fontWeight: FontWeight.bold)),
-                      Text(item['status'] ?? 'menunggu', 
-                        style: TextStyle(fontSize: 12, color: Colors.orange[800], fontWeight: FontWeight.bold)),
-                    ],
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: ListTile(
+          leading: (imageUrl != null && imageUrl.toString().isNotEmpty)
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: Image.network(
+                    imageUrl,
+                    width: 60,
+                    height: 60,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 40),
                   ),
-                ),
+                )
+              : const Icon(Icons.image_not_supported, size: 40),
+          title: Text(user['nama'] ?? 'Tanpa Nama', 
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          subtitle: Padding(
+            padding: const EdgeInsets.top(4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Alat: ${alat['nama_alat'] ?? '-'}"),
+                Text("Jumlah: ${detail['jumlah'] ?? 0}"),
+                Text("Tgl Pinjam: $tanggal", style: const TextStyle(fontSize: 12, color: Colors.grey)),
               ],
             ),
-            const Divider(height: 20),
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(8)),
-                  child: const Icon(Icons.laptop, size: 30, color: Color(0xFF1E4C90)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("ID Alat: ${item['id_alat']}", style: const TextStyle(fontWeight: FontWeight.w600)),
-                      Text("Tgl Ajukan: ${item['tanggal_pinjam'] ?? '-'}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                    ],
+          ),
+          trailing: item['status'] == 'menunggu'
+              ? Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.check_circle, color: Colors.green),
+                          onPressed: () => _updateStatus(item, 'disetujui'),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.cancel, color: Colors.red),
+                          onPressed: () => _updateStatus(item, 'ditolak'),
+                        ),
+                      ],
+                    ),
+                  ],
+                )
+              : Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: item['status'] == 'disetujui' ? Colors.green.withOpacity(0.1) : Colors.red.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    item['status'].toString().toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: item['status'] == 'disetujui' ? Colors.green : Colors.red,
+                    ),
                   ),
                 ),
-                if (item['status'] == 'menunggu')
-                  ElevatedButton(
-                    onPressed: () => _openDetailDialog(item),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E4C90),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: const Text("Detail", style: TextStyle(color: Colors.white)),
-                  )
-              ],
-            )
-          ],
         ),
       ),
     );
   }
 
-  void _openDetailDialog(Map<String, dynamic> item) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _DetailBottomSheet(item: item, supabase: supabase),
-    );
-  }
-}
-
-class _DetailBottomSheet extends StatefulWidget {
-  final Map<String, dynamic> item;
-  final SupabaseClient supabase;
-  const _DetailBottomSheet({required this.item, required this.supabase});
-
-  @override
-  State<_DetailBottomSheet> createState() => _DetailBottomSheetState();
-}
-
-class _DetailBottomSheetState extends State<_DetailBottomSheet> {
-  DateTime selectedDateAmbil = DateTime.now();
-  DateTime selectedDateKembali = DateTime.now().add(const Duration(days: 3));
-
-  // Fungsi Approve yang kamu minta sudah dimasukkan ke sini
-  Future<void> _processStatus(String newStatus) async {
+  Future<void> _updateStatus(Map<String, dynamic> item, String status) async {
     try {
-      if (newStatus == 'disetujui') {
-        await widget.supabase.from('peminjaman').update({
-          'status': 'disetujui',
-          'tanggal_pinjam': selectedDateAmbil.toIso8601String(),
-          'tanggal_kembali': selectedDateKembali.toIso8601String(),
-        }).eq('id_peminjaman', widget.item['id_peminjaman']);
-      } else {
-        await widget.supabase.from('peminjaman').update({
-          'status': 'ditolak',
-        }).eq('id_peminjaman', widget.item['id_peminjaman']);
-      }
-
+      await supabase
+          .from('peminjaman')
+          .update({'status': status})
+          .eq('id_peminjaman', item['id_peminjaman']);
+      
       if (mounted) {
-        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Berhasil update status menjadi $newStatus")),
+          SnackBar(content: Text("Berhasil: Permintaan $status")),
         );
+        setState(() {}); // Segarkan UI
       }
     } catch (e) {
-      debugPrint("Error: $e");
+      debugPrint("Update Error: $e");
     }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Center(child: Text("Detail Persetujuan", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
-          const SizedBox(height: 20),
-          
-          const Text("Tanggal Ambil", style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          _dateTile(DateFormat('dd/MM/yyyy').format(selectedDateAmbil), Icons.calendar_month, () async {
-            final picked = await showDatePicker(context: context, initialDate: selectedDateAmbil, firstDate: DateTime.now(), lastDate: DateTime(2030));
-            if (picked != null) setState(() => selectedDateAmbil = picked);
-          }),
-
-          const SizedBox(height: 15),
-          const Text("Tanggal Harus Kembali", style: TextStyle(fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          _dateTile(DateFormat('dd/MM/yyyy').format(selectedDateKembali), Icons.event_available, () async {
-            final picked = await showDatePicker(context: context, initialDate: selectedDateKembali, firstDate: selectedDateAmbil, lastDate: DateTime(2030));
-            if (picked != null) setState(() => selectedDateKembali = picked);
-          }),
-
-          const SizedBox(height: 25),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () => _processStatus('ditolak'),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                  child: const Text("Tolak"),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () => _processStatus('disetujui'),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E4C90)),
-                  child: const Text("Setujui", style: TextStyle(color: Colors.white)),
-                ),
-              ),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _dateTile(String label, IconData icon, VoidCallback onTap) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(border: Border.all(color: Colors.grey.shade300), borderRadius: BorderRadius.circular(8)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [Text(label), Icon(icon, size: 18, color: Colors.grey)],
-        ),
-      ),
-    );
   }
 }

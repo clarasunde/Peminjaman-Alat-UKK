@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'detail_alat_screen.dart';
+import 'keranjang_screen.dart';
+import '../peminjam/notifikasi.dart';
 
 class AlatPeminjamPage extends StatefulWidget {
-  const AlatPeminjamPage({super.key});
+  final Map<String, dynamic>? userData;
+
+  const AlatPeminjamPage({super.key, this.userData});
 
   @override
   State<AlatPeminjamPage> createState() => _AlatPeminjamPageState();
@@ -10,60 +15,136 @@ class AlatPeminjamPage extends StatefulWidget {
 
 class _AlatPeminjamPageState extends State<AlatPeminjamPage> {
   final supabase = Supabase.instance.client;
-  
-  // Gunakan id 0 untuk kategori "Semua"
-  int selectedKategoriId = 0; 
-  String selectedKategoriName = "Semua";
+
+  int jumlahNotif = 0;
+
+  // ================= SEARCH BAR (BARU)
+  String searchText = '';
+  final TextEditingController searchController = TextEditingController();
+
+  // ================= FILTER KATEGORI
+  int selectedKategoriId = 0;
+
+  final kategoriList = [
+    {'id': 0, 'name': 'Semua'},
+    {'id': 1, 'name': 'Laptop'},
+    {'id': 2, 'name': 'Proyektor'},
+    {'id': 3, 'name': 'Kamera'},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    getNotifCount();
+  }
+
+  // ================= NOTIF =================
+  Future<void> getNotifCount() async {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return;
+
+    final res = await supabase
+        .from('notifikasi')
+        .select()
+        .eq('id_user', userId)
+        .eq('is_read', false);
+
+    setState(() => jumlahNotif = res.length);
+  }
+
+  // ================= STREAM + FILTER =================
+  Stream<List<Map<String, dynamic>>> _getStream() {
+    var query = supabase.from('alat').stream(primaryKey: ['id_alat']);
+
+    if (selectedKategoriId != 0) {
+      return query.eq('id_kategori', selectedKategoriId);
+    }
+
+    return query;
+  }
 
   @override
   Widget build(BuildContext context) {
+    final userEmail =
+        widget.userData?['email'] ?? supabase.auth.currentUser?.email ?? '';
+    final userName = widget.userData?['nama'] ?? 'Peminjam';
+
     return Scaffold(
       backgroundColor: Colors.white,
+
+      // ================= FAB =================
+      floatingActionButton: Stack(
+        children: [
+          FloatingActionButton(
+            backgroundColor: const Color(0xFF1E4C90),
+            child: const Icon(Icons.shopping_cart),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const KeranjangScreen(),
+                ),
+              ).then((_) => setState(() {}));
+            },
+          ),
+
+          if (keranjangGlobal.isNotEmpty)
+            Positioned(
+              right: 0,
+              top: 0,
+              child: CircleAvatar(
+                radius: 9,
+                backgroundColor: Colors.red,
+                child: Text(
+                  "${keranjangGlobal.length}",
+                  style: const TextStyle(fontSize: 10, color: Colors.white),
+                ),
+              ),
+            )
+        ],
+      ),
+
       body: Column(
         children: [
-          _buildHeader(),
-          const SizedBox(height: 20),
-          
-          // Tab Kategori dengan tombol "Semua"
+          // ================= HEADER + SEARCH =================
+          CustomHeader(
+            nama: userName,
+            email: userEmail,
+            jumlahNotif: jumlahNotif,
+            controller: searchController,
+            onSearch: (value) {
+              setState(() => searchText = value);
+            },
+            onNotifTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const NotifikasiPage()),
+              );
+            },
+          ),
+
+          // ================= KATEGORI TAB =================
           _buildCategoryTabs(),
 
-          const SizedBox(height: 15),
-
+          // ================= LIST =================
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _getFilteredStream(),
+              stream: _getStream(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                
-                if (snapshot.hasError) {
-                  return Center(child: Text("Terjadi kesalahan: ${snapshot.error}"));
-                }
+                final raw = snapshot.data ?? [];
 
-                final data = snapshot.data ?? [];
-
-                if (data.isEmpty) {
-                  return Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.inventory_2_outlined, size: 50, color: Colors.grey),
-                        const SizedBox(height: 10),
-                        Text("Alat kategori $selectedKategoriName belum tersedia.", 
-                             style: const TextStyle(color: Colors.grey)),
-                      ],
-                    ),
-                  );
-                }
+                // 🔥 FILTER SEARCH LOKAL
+                final data = raw.where((item) {
+                  final nama =
+                      (item['nama_alat'] ?? '').toString().toLowerCase();
+                  return nama.contains(searchText.toLowerCase());
+                }).toList();
 
                 return ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.all(15),
                   itemCount: data.length,
-                  itemBuilder: (context, index) {
-                    final item = data[index];
-                    return _buildAlatCard(item);
-                  },
+                  itemBuilder: (_, i) => _buildAlatCard(data[i]),
                 );
               },
             ),
@@ -73,53 +154,37 @@ class _AlatPeminjamPageState extends State<AlatPeminjamPage> {
     );
   }
 
-  // Logika Query: Jika ID 0, jangan filter berdasarkan id_kategori
-  Stream<List<Map<String, dynamic>>> _getFilteredStream() {
-    var query = supabase.from('alat').stream(primaryKey: ['id_alat']);
-    
-    if (selectedKategoriId != 0) {
-      return query.eq('id_kategori', selectedKategoriId);
-    }
-    
-    return query; // Mengembalikan semua data jika id_kategori adalah 0
-  }
-
+  // ================= CATEGORY =================
   Widget _buildCategoryTabs() {
-    // Tambahkan "Semua" ke dalam daftar categories
-    final categories = [
-      {'id': 0, 'name': 'Semua'},
-      {'id': 1, 'name': 'Laptop'},
-      {'id': 2, 'name': 'Proyektor'},
-      {'id': 3, 'name': 'Kamera'},
-    ];
-
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 15),
+      padding: const EdgeInsets.all(15),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: categories.map((cat) {
-          bool isSelected = selectedKategoriId == cat['id'];
+        children: kategoriList.map((cat) {
+          final isSelected = selectedKategoriId == cat['id'];
+
           return GestureDetector(
             onTap: () {
               setState(() {
                 selectedKategoriId = cat['id'] as int;
-                selectedKategoriName = cat['name'] as String;
               });
             },
             child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 5),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              margin: const EdgeInsets.only(right: 10),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               decoration: BoxDecoration(
-                color: isSelected ? const Color(0xFF5BA2E1) : Colors.grey[200],
+                color: isSelected
+                    ? const Color(0xFF1E4C90)
+                    : Colors.grey[200],
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
-                cat['name'].toString(), 
+                cat['name'].toString(),
                 style: TextStyle(
-                  color: isSelected ? Colors.white : Colors.black54, 
-                  fontWeight: FontWeight.bold
-                )
+                  color: isSelected ? Colors.white : Colors.black87,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
           );
@@ -128,95 +193,154 @@ class _AlatPeminjamPageState extends State<AlatPeminjamPage> {
     );
   }
 
-  // Fungsi buildHeader, buildAlatCard, dan badgeKondisi tetap sama seperti sebelumnya
-  Widget _buildHeader() {
-    return Container(
-      padding: const EdgeInsets.only(top: 60, left: 25, right: 25, bottom: 30),
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E4C90),
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(30), 
-          bottomRight: Radius.circular(30)
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text("Hallo, Peminjam", 
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-          const Text("Online", style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
-          const SizedBox(height: 20),
-          TextField(
-            decoration: InputDecoration(
-              hintText: "Cari alat pinjamanmu...",
-              prefixIcon: const Icon(Icons.search),
-              fillColor: Colors.white,
-              filled: true,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
+  // ================= CARD =================
   Widget _buildAlatCard(Map<String, dynamic> alat) {
+    final imageUrl = alat['gambar_alat'] ?? '';
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+          )
+        ],
       ),
       child: Row(
         children: [
           ClipRRect(
             borderRadius: BorderRadius.circular(10),
             child: Image.network(
-              alat['gambar_alat'] ?? '', 
-              width: 80, height: 60, fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => const Icon(Icons.image_not_supported),
+              imageUrl,
+              width: 80,
+              height: 65,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+                  const Icon(Icons.image_not_supported),
             ),
           ),
-          const SizedBox(width: 15),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(alat['nama_alat'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
-                Text("Stok: ${alat['stok']}", style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                const SizedBox(height: 5),
-                _badgeKondisi(alat['kondisi'] ?? 'tersedia'),
+                Text(alat['nama_alat'] ?? '',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text("Stok: ${alat['stok']}"),
               ],
             ),
           ),
           ElevatedButton(
-            onPressed: () {},
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF1E4C90),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))
-            ),
-            child: const Text("Detail", style: TextStyle(color: Colors.white, fontSize: 11)),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DetailAlatScreen(alat: alat),
+                ),
+              );
+            },
+            child: const Text("Detail"),
           )
         ],
       ),
     );
   }
+}
 
-  Widget _badgeKondisi(String kondisi) {
+
+
+
+
+
+
+
+// ==================================================
+// HEADER + SEARCH BAR (UPDATE)
+// ==================================================
+class CustomHeader extends StatelessWidget {
+  final String nama;
+  final String email;
+  final int jumlahNotif;
+  final VoidCallback onNotifTap;
+  final Function(String) onSearch;
+  final TextEditingController controller;
+
+  const CustomHeader({
+    super.key,
+    required this.nama,
+    required this.email,
+    required this.jumlahNotif,
+    required this.onNotifTap,
+    required this.onSearch,
+    required this.controller,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: kondisi == "tersedia" ? Colors.green[50] : Colors.orange[50],
-        borderRadius: BorderRadius.circular(5)
+      padding:
+          const EdgeInsets.only(top: 50, left: 20, right: 20, bottom: 20),
+      decoration: const BoxDecoration(
+        color: Color(0xFF1E4C90),
+        borderRadius:
+            BorderRadius.vertical(bottom: Radius.circular(20)),
       ),
-      child: Text(
-        kondisi.toUpperCase(), 
-        style: TextStyle(
-          color: kondisi == "tersedia" ? Colors.green : Colors.orange, 
-          fontSize: 9, fontWeight: FontWeight.bold
-        )
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Hallo $nama",
+                      style: const TextStyle(color: Colors.white)),
+                  Text(email,
+                      style: const TextStyle(color: Colors.white70)),
+                ],
+              ),
+              IconButton(
+                icon:
+                    const Icon(Icons.notifications, color: Colors.white),
+                onPressed: onNotifTap,
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 14),
+
+          // 🔥 TEXT BARU
+          const Text(
+            "Pinjam alat apa hari ini?",
+            style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold),
+          ),
+
+          const SizedBox(height: 10),
+
+          // 🔥 SEARCH BAR
+          TextField(
+            controller: controller,
+            onChanged: onSearch,
+            decoration: InputDecoration(
+              hintText: "Cari alat pinjaman...",
+              prefixIcon: const Icon(Icons.search),
+              filled: true,
+              fillColor: Colors.white,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

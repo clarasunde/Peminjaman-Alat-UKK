@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PinjamPage extends StatefulWidget {
-  const PinjamPage({super.key});
+  // 1. Terima data user dari halaman induk
+  final Map<String, dynamic>? userData;
+
+  const PinjamPage({super.key, this.userData});
 
   @override
   State<PinjamPage> createState() => _PinjamPageState();
@@ -11,7 +14,7 @@ class PinjamPage extends StatefulWidget {
 class _PinjamPageState extends State<PinjamPage> {
   final supabase = Supabase.instance.client;
 
-  // Mendapatkan ID user yang sedang login saat ini
+  // Mendapatkan ID user yang sedang login untuk filter data
   String get currentUserId => supabase.auth.currentUser?.id ?? '';
 
   @override
@@ -20,10 +23,12 @@ class _PinjamPageState extends State<PinjamPage> {
       backgroundColor: Colors.grey[100],
       body: Column(
         children: [
+          // Header Dinamis
           _buildHeader(),
+          
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
-              // Mengambil data dari tabel peminjaman milik user tersebut
+              // Realtime stream data peminjaman milik user yang sedang login
               stream: supabase
                   .from('peminjaman')
                   .stream(primaryKey: ['id_peminjaman'])
@@ -61,6 +66,11 @@ class _PinjamPageState extends State<PinjamPage> {
   }
 
   Widget _buildHeader() {
+    // Ambil email dari userData, jika tidak ada ambil dari auth, jika tidak ada pake default
+    final String userEmail = widget.userData?['email'] ?? 
+                             supabase.auth.currentUser?.email ?? 
+                             'peminjam@gmail.com';
+
     return Container(
       padding: const EdgeInsets.only(top: 60, left: 25, right: 25, bottom: 30),
       decoration: const BoxDecoration(
@@ -72,14 +82,30 @@ class _PinjamPageState extends State<PinjamPage> {
       ),
       child: Row(
         children: [
-          const CircleAvatar(radius: 25, backgroundColor: Colors.white, child: Icon(Icons.person, size: 30)),
+          const CircleAvatar(
+            radius: 25, 
+            backgroundColor: Colors.white, 
+            child: Icon(Icons.person, size: 30, color: Color(0xFF1E4C90))
+          ),
           const SizedBox(width: 15),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text("Hallo, ${supabase.auth.currentUser?.email?.split('@')[0] ?? 'User'}", 
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-              const Text("Online", style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
+              const Text(
+                "Hallo Peminjam", 
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)
+              ),
+              Text(
+                userEmail, 
+                style: const TextStyle(color: Colors.white70, fontSize: 13)
+              ),
+              const Row(
+                children: [
+                  Icon(Icons.circle, color: Colors.greenAccent, size: 10),
+                  SizedBox(width: 5),
+                  Text("Online", style: TextStyle(color: Colors.greenAccent, fontSize: 12)),
+                ],
+              ),
             ],
           ),
         ],
@@ -88,7 +114,6 @@ class _PinjamPageState extends State<PinjamPage> {
   }
 
   Widget _buildPinjamCard(Map<String, dynamic> data) {
-    // Sesuai kolom di image_6aef55.png: 'menunggu' atau 'disetujui'
     String status = data['status'] ?? 'menunggu'; 
     bool isApproved = status == 'disetujui';
 
@@ -104,11 +129,10 @@ class _PinjamPageState extends State<PinjamPage> {
         children: [
           Row(
             children: [
-              // Placeholder gambar alat
               Container(
                 width: 60, height: 60,
                 decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(10)),
-                child: const Icon(Icons.laptop, color: Colors.grey),
+                child: const Icon(Icons.inventory_2, color: Colors.grey),
               ),
               const SizedBox(width: 15),
               Expanded(
@@ -116,13 +140,13 @@ class _PinjamPageState extends State<PinjamPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text("Detail Pengajuan", style: TextStyle(fontWeight: FontWeight.bold)),
-                    // Sesuai kolom 'tanggal_pinjam' & 'tanggal_kembali' di DB
-                    Text("${data['tanggal_pinjam']} s/d ${data['tanggal_kembali']}", 
-                      style: const TextStyle(color: Colors.grey, fontSize: 11)),
+                    Text(
+                      "${data['tanggal_pinjam']} s/d ${data['tanggal_kembali']}", 
+                      style: const TextStyle(color: Colors.grey, fontSize: 11)
+                    ),
                   ],
                 ),
               ),
-              // Status badge sesuai UI di image_6a94a6.png
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
@@ -143,7 +167,7 @@ class _PinjamPageState extends State<PinjamPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text("Total: 1 Alat", style: TextStyle(fontSize: 12)),
+              const Text("Riwayat Pengajuan", style: TextStyle(fontSize: 12, color: Colors.grey)),
               ElevatedButton(
                 onPressed: () => _showDetailModal(data),
                 style: ElevatedButton.styleFrom(
@@ -175,22 +199,27 @@ class _PinjamPageState extends State<PinjamPage> {
           children: [
             Center(child: Container(width: 50, height: 5, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
             const SizedBox(height: 20),
-            Text(isApproved ? "Pengajuan Berhasil" : "Menunggu Persetujuan", 
+            Text(isApproved ? "Pengajuan Disetujui" : "Menunggu Persetujuan", 
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
             const SizedBox(height: 10),
-            Text(isApproved 
-              ? "Pengajuan kamu sudah disetujui petugas. Silakan ambil alat sesuai jadwal." 
-              : "Petugas sedang memproses pengajuanmu. Harap tunggu persetujuan lebih lanjut.",
-              style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            Text(
+              isApproved 
+                ? "Pengajuan kamu sudah disetujui petugas. Silakan ambil alat di gudang." 
+                : "Petugas sedang memproses pengajuanmu. Harap tunggu konfirmasi.",
+              style: const TextStyle(color: Colors.grey, fontSize: 13)
+            ),
             const Divider(height: 30),
-            _infoRow("Tanggal Pinjam", data['tanggal_pinjam']),
-            _infoRow("Tanggal Kembali", data['tanggal_kembali']),
+            _infoRow("Tanggal Pinjam", data['tanggal_pinjam'] ?? '-'),
+            _infoRow("Tanggal Kembali", data['tanggal_kembali'] ?? '-'),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1E4C90)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF1E4C90),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+                ),
                 child: const Text("Tutup", style: TextStyle(color: Colors.white)),
               ),
             )

@@ -5,13 +5,23 @@ import 'auth_service.dart';
 class LogoutScreen extends StatelessWidget {
   const LogoutScreen({super.key});
 
+  // FUNGSI BARU: Mengambil huruf pertama dari nama secara otomatis
+  String _generateInitial(String? nama) {
+    if (nama == null || nama.isEmpty || nama == 'User') return "U";
+    
+    // Mengambil karakter pertama dan menjadikannya huruf kapital
+    return nama[0].toUpperCase(); 
+  }
+
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
     final user = authService.userData;
     
-    // Mengambil role header (Admin,Petugas,Peminjam)
-    String roleDisplay = user?['role']?.toString().toUpperCase() ?? 'USER';
+    // Mengambil data real-time dari database (tabel public.users)
+    String namaUser = user?['nama']?.toString() ?? 'User'; 
+    String roleUser = user?['role']?.toString() ?? 'peminjam';
+    String emailUser = user?['email'] ?? 'email@gmail.com';
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -24,7 +34,7 @@ class LogoutScreen extends StatelessWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 1. Header Profil
+            // 1. Header Profil Otomatis Berdasarkan Nama
             Container(
               padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
               decoration: const BoxDecoration(
@@ -41,20 +51,28 @@ class LogoutScreen extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "Hallo $roleDisplay",
+                          "Hallo $namaUser", 
                           style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
                         ),
                         Text(
-                          user?['email'] ?? 'email@gmail.com',
+                          emailUser, 
                           style: const TextStyle(color: Colors.white70, fontSize: 14),
                         ),
                       ],
                     ),
                   ),
-                  const CircleAvatar(
+                  // AVATAR INISIAL OTOMATIS (Sekarang menggunakan namaUser)
+                  CircleAvatar(
                     radius: 40,
                     backgroundColor: Colors.white24,
-                    child: Icon(Icons.person, size: 50, color: Colors.white),
+                    child: Text(
+                      _generateInitial(namaUser), // Memanggil fungsi dengan parameter nama
+                      style: const TextStyle(
+                        fontSize: 32, 
+                        fontWeight: FontWeight.bold, 
+                        color: Colors.white
+                      ),
+                    ),
                   )
                 ],
               ),
@@ -62,15 +80,15 @@ class LogoutScreen extends StatelessWidget {
 
             const SizedBox(height: 30),
 
-            // 2. Form Informasi (Read Only sesuai desain)
+            // 2. Form Informasi Dinamis
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 25),
               child: Column(
                 children: [
-                  _buildInfoField("Nama", user?['nama'] ?? '-'),
-                  _buildInfoField("Email", user?['email'] ?? '-'),
-                  _buildInfoField("Sandi", "********"),
-                  _buildInfoField("Sebagai", roleDisplay),
+                  _buildInfoField("Nama Akun", namaUser),
+                  _buildInfoField("Email Terdaftar", emailUser),
+                  _buildInfoField("Kata Sandi", "********"),
+                  _buildInfoField("Level Akses", roleUser.toUpperCase()), 
                   
                   const SizedBox(height: 50),
 
@@ -112,7 +130,6 @@ class LogoutScreen extends StatelessWidget {
     );
   }
 
-  // Konfirmasi/Validasi Keluar (tombol)
   void _showLogoutDialog(BuildContext context, AuthService authService) {
     showDialog(
       context: context,
@@ -122,10 +139,10 @@ class LogoutScreen extends StatelessWidget {
           children: [
             Icon(Icons.warning_amber_rounded, color: Colors.red, size: 50),
             SizedBox(height: 10),
-            Text("Keluar", style: TextStyle(fontWeight: FontWeight.bold)),
+            Text("Konfirmasi Keluar", style: TextStyle(fontWeight: FontWeight.bold)),
           ],
         ),
-        content: const Text("Apakah anda yakin ingin keluar dari aplikasi?", textAlign: TextAlign.center),
+        content: const Text("Apakah anda yakin ingin keluar dari akun ini?", textAlign: TextAlign.center),
         actionsAlignment: MainAxisAlignment.center,
         actions: [
           OutlinedButton(
