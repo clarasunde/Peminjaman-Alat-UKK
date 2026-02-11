@@ -5,7 +5,6 @@ import '../auth/auth_service.dart';
 import '../auth/logout.dart';
 import 'setuju.dart';
 import 'kembali.dart';
-import 'laporan.dart';
 
 class PetugasPage extends StatefulWidget {
   const PetugasPage({super.key});
@@ -101,7 +100,6 @@ class _PetugasPageState extends State<PetugasPage> {
       _buildBerandaPetugas(user),
       const PersetujuanPage(),
       const PengembalianPage(),
-      const LaporanPage(),
       const LogoutScreen(),
     ];
 

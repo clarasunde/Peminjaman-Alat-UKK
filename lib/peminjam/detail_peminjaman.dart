@@ -5,121 +5,150 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class DetailPeminjamanPage extends StatelessWidget {
   final Map<String, dynamic> data;
 
-  const DetailPeminjamanPage({super.key, required this.data});
+  DetailPeminjamanPage({super.key, required this.data});
 
-  // Helper untuk format tanggal Indonesia
+  final supabase = Supabase.instance.client;
+
+  // ================= KONFIGURASI DENDA =================
+  final int tarifDendaPerHari = 10000;
+
+  // ================= FORMAT TANGGAL =================
   String _formatDate(String? dateStr) {
-    if (dateStr == null) return '-';
+    if (dateStr == null || dateStr.isEmpty) return '-';
     try {
       final date = DateTime.parse(dateStr);
       return DateFormat('dd MMMM yyyy', 'id_ID').format(date);
     } catch (e) {
-      return dateStr;
+      return '-';
     }
   }
 
-  // --- FUNGSI PROSES PENGEMBALIAN ---
-  Future<void> _prosesPengembalian(BuildContext context) async {
+  // ================= LOGIC HITUNG TELAT & DENDA =================
+  Map<String, dynamic> _hitungKeterlambatan() {
+    if (data['tanggal_kembali'] == null) return {'hari': 0, 'total': 0};
+
     try {
-      // 1. Tampilkan Loading
+      DateTime tenggat = DateTime.parse(data['tanggal_kembali']);
+      DateTime sekarang = DateTime.now();
+
+      // Normalisasi waktu ke tengah malam agar hitungan hari akurat
+      DateTime tenggatDate = DateTime(tenggat.year, tenggat.month, tenggat.day);
+      DateTime sekarangDate = DateTime(sekarang.year, sekarang.month, sekarang.day);
+
+      if (sekarangDate.isAfter(tenggatDate)) {
+        int selisih = sekarangDate.difference(tenggatDate).inDays;
+        return {
+          'hari': selisih,
+          'total': selisih * tarifDendaPerHari,
+        };
+      }
+    } catch (e) {
+      debugPrint("Error hitung denda: $e");
+    }
+    return {'hari': 0, 'total': 0};
+  }
+
+  // ================= AJUKAN PENGEMBALIAN =================
+  Future<void> _prosesPengembalian(BuildContext context) async {
+    final id = data['id_peminjaman'];
+    final infoDenda = _hitungKeterlambatan();
+
+    try {
+      if (id == null) throw "ID peminjaman tidak ditemukan.";
+
+      // 1. Tampilkan Loading Indicator
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
+        builder: (_) => const Center(child: CircularProgressIndicator()),
       );
 
-      final idPeminjaman = data['id_peminjaman'];
-      if (idPeminjaman == null) throw "ID Peminjaman tidak ditemukan";
+      // 2. Cek apakah sudah pernah mengajukan pengembalian sebelumnya
+      final exist = await supabase
+          .from('pengembalian')
+          .select()
+          .eq('id_peminjaman', id)
+          .maybeSingle();
 
-      // 2. Insert ke tabel pengembalian
-      await Supabase.instance.client.from('pengembalian').insert({
-        'id_peminjaman': idPeminjaman,
+      if (exist != null) {
+        if (!context.mounted) return;
+        Navigator.pop(context); // Tutup loading
+        throw "Pengembalian untuk data ini sudah diajukan sebelumnya.";
+      }
+
+      // 3. Simpan data ke tabel 'pengembalian'
+      await supabase.from('pengembalian').insert({
+        'id_peminjaman': id,
         'tanggal_kembali': DateTime.now().toIso8601String(),
-        'status_pembayaran': 'menunggu', 
+        'terlambat_hari': infoDenda['hari'],
+        'total_denda': infoDenda['total'],
+        'status': 'menunggu', 
       });
 
-      // 3. Update status peminjaman menjadi 'selesai'
-      // Menggunakan 'selesai' agar sesuai dengan ENUM di Database kamu
-      await Supabase.instance.client
+      // 4. Update status di tabel 'peminjaman' menjadi 'selesai'
+      // Sesuai ENUM Supabase: menunggu, disetujui, ditolak, selesai
+      await supabase
           .from('peminjaman')
-          .update({'status': 'selesai'}) 
-          .eq('id_peminjaman', idPeminjaman);
+          .update({'status': 'selesai'})
+          .eq('id_peminjaman', id);
 
-      if (context.mounted) {
-        Navigator.pop(context); // Tutup Loading
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Berhasil mengembalikan alat!")),
-        );
-        Navigator.pop(context, true); // Kembali & refresh halaman sebelumnya
-      }
+      if (!context.mounted) return;
+      Navigator.pop(context); // Tutup loading
+
+      // 5. Berikan feedback sukses
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(infoDenda['hari'] > 0 
+            ? "Berhasil dikembalikan dengan denda Rp ${infoDenda['total']}" 
+            : "Pengembalian berhasil diajukan. Status: Selesai."),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Kembali ke halaman sebelumnya dan memberi instruksi untuk refresh list
+      Navigator.pop(context, true);
+
     } catch (e) {
-      if (context.mounted) Navigator.pop(context); // Tutup loading
-      
-      String pesanError = e.toString();
-      
-      // Deteksi error Enum (22P02) atau RLS (42501)
-      if (pesanError.contains("22P02")) {
-        pesanError = "Gagal: Status 'selesai' tidak terdaftar di database.";
-      } else if (pesanError.contains("row-level security") || pesanError.contains("42501")) {
-        pesanError = "Izin ditolak (RLS). Silahkan aktifkan Policy INSERT di tabel 'pengembalian' pada dashboard Supabase.";
-      }
-
       if (context.mounted) {
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text("Gagal Simpan"),
-            content: Text(pesanError),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context), 
-                child: const Text("Tutup")
-              )
-            ],
-          ),
-        );
+        if (Navigator.canPop(context)) Navigator.pop(context); // Tutup loading jika gagal
+        _showError(context, e.toString());
       }
     }
   }
 
-  // --- FUNGSI BATAL PEMINJAMAN ---
-  Future<void> _batalPeminjaman(BuildContext context) async {
-    try {
-      final idPeminjaman = data['id_peminjaman'];
-      
-      await Supabase.instance.client
-          .from('peminjaman')
-          .delete()
-          .eq('id_peminjaman', idPeminjaman);
-      
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Peminjaman berhasil dibatalkan")),
-        );
-        Navigator.pop(context, true);
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Gagal membatalkan: $e")),
-        );
-      }
-    }
+  void _showError(BuildContext context, String msg) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text("Informasi"),
+        content: Text(msg),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context), 
+            child: const Text("Tutup")
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final status = data['status']?.toString().toLowerCase() ?? 'menunggu';
-    final isDisetujui = status == 'disetujui';
-    final isMenunggu = status == 'menunggu';
     final details = data['detail_peminjaman'] as List? ?? [];
+    final infoDenda = _hitungKeterlambatan();
+
+    final isDisetujui = status == 'disetujui';
+    final isSelesai = status == 'selesai';
 
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: Text(isDisetujui ? 'Detail Peminjaman' : 'Status Pengajuan'),
+        title: const Text("Detail Peminjaman", 
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         backgroundColor: const Color(0xFF1E4C90),
         foregroundColor: Colors.white,
+        centerTitle: true,
         elevation: 0,
       ),
       body: SingleChildScrollView(
@@ -127,85 +156,117 @@ class DetailPeminjamanPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildStatusBanner(isDisetujui, status),
+            _buildStatusBanner(status),
             const SizedBox(height: 25),
-            const Text("Informasi Waktu", 
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 10),
-            _buildInfoCard(data),
-            const SizedBox(height: 25),
-            const Text("Daftar Alat yang Dipinjam:", 
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-            const SizedBox(height: 10),
-            ...details.map((d) => _buildAlatItem(d)).toList(),
-            const SizedBox(height: 40),
             
-            // --- TOMBOL AKSI ---
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            // --- KARTU INFO TANGGAL ---
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+              ),
+              child: Column(
+                children: [
+                  _rowInfo("Tanggal Pinjam", _formatDate(data['tanggal_pinjam'])),
+                  const Divider(height: 20),
+                  _rowInfo("Rencana Kembali", _formatDate(data['tanggal_kembali'])),
+                  
+                  // Hanya tampil jika peminjaman sudah aktif (disetujui/selesai)
+                  if (isDisetujui || isSelesai) ...[
+                    const Divider(height: 20),
+                    _rowInfo(
+                      "Tanggal Tenggat", 
+                      _formatDate(data['tanggal_kembali']), 
+                      isBold: true,
+                      textColor: Colors.blueAccent,
                     ),
-                    child: const Text("Tutup", style: TextStyle(color: Colors.black)),
+                    
+                    if (infoDenda['hari'] > 0) ...[
+                      const Divider(height: 20),
+                      _rowInfo("Keterlambatan", "${infoDenda['hari']} Hari", textColor: Colors.red),
+                      _rowInfo("Total Denda", "Rp ${infoDenda['total']}", 
+                        isBold: true, textColor: Colors.red),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 25),
+            const Text("Daftar Alat", 
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            const SizedBox(height: 10),
+            
+            // Mapping List Alat
+            ...details.map((d) => _buildAlatItem(d)).toList(),
+            
+            const SizedBox(height: 40),
+
+            // Tombol Aksi: Hanya muncul jika barang sudah dipinjam (disetujui) 
+            // namun belum dikembalikan (belum selesai)
+            if (isDisetujui)
+              SizedBox(
+                width: double.infinity,
+                height: 55,
+                child: ElevatedButton(
+                  onPressed: () => _prosesPengembalian(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF1E4C90),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    elevation: 2,
                   ),
+                  child: const Text("Ajukan Pengembalian", 
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                 ),
-                const SizedBox(width: 15),
-                if (isDisetujui || isMenunggu)
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (isDisetujui) {
-                        _prosesPengembalian(context);
-                      } else {
-                        _batalPeminjaman(context);
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1E4C90),
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                    child: Text(
-                      isDisetujui ? "Kembalikan Alat" : "Batalkan Pesanan",
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                ),
-              ],
-            )
+              ),
           ],
         ),
       ),
     );
   }
 
-  // --- WIDGET COMPONENTS ---
+  // ================= UI SUB-COMPONENTS =================
 
-  Widget _buildStatusBanner(bool isDisetujui, String status) {
-    Color color = isDisetujui ? Colors.green : Colors.orange;
-    if (status == 'ditolak') color = Colors.red;
+  Widget _buildAlatItem(Map detail) {
+    final alat = detail['alat'] ?? {};
+    final String? imageUrl = alat['gambar_alat'];
+    final String namaAlat = alat['nama_alat'] ?? 'Nama tidak tersedia';
 
     return Container(
-      padding: const EdgeInsets.all(15),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.5)),
+        border: Border.all(color: Colors.grey.shade200),
       ),
       child: Row(
         children: [
-          Icon(isDisetujui ? Icons.check_circle : Icons.info_outline, color: color),
-          const SizedBox(width: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: imageUrl != null && imageUrl.isNotEmpty
+                ? Image.network(
+                    imageUrl,
+                    width: 60, height: 60,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => _buildPlaceholder(),
+                  )
+                : _buildPlaceholder(),
+          ),
+          const SizedBox(width: 15),
           Expanded(
-            child: Text(
-              isDisetujui 
-                ? "Disetujui. Silahkan kembalikan alat jika sudah selesai digunakan."
-                : (status == 'ditolak' ? "Pengajuan Ditolak." : "Menunggu konfirmasi petugas."),
-              style: const TextStyle(fontSize: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(namaAlat, 
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const SizedBox(height: 4),
+                Text("Jumlah: ${detail['jumlah']} Unit", 
+                  style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              ],
             ),
           ),
         ],
@@ -213,50 +274,49 @@ class DetailPeminjamanPage extends StatelessWidget {
     );
   }
 
-  Widget _buildAlatItem(Map detail) {
-    final alat = detail['alat'] ?? {};
-    return Card(
-      margin: const EdgeInsets.only(bottom: 10),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: Image.network(
-            alat['gambar_alat'] ?? '',
-            width: 50, height: 50, fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => const Icon(Icons.inventory_2, size: 40),
-          ),
-        ),
-        title: Text(alat['nama_alat'] ?? 'Alat', style: const TextStyle(fontWeight: FontWeight.bold)),
-        subtitle: Text("Jumlah: ${detail['jumlah']} unit"),
-      ),
-    );
-  }
-
-  Widget _buildInfoCard(Map item) {
+  Widget _buildPlaceholder() {
     return Container(
-      padding: const EdgeInsets.all(15),
+      width: 60, height: 60,
+      color: Colors.grey[100],
+      child: const Icon(Icons.inventory_2, color: Colors.blueGrey),
+    );
+  }
+
+  Widget _buildStatusBanner(String status) {
+    Color color;
+    switch (status) {
+      case 'selesai': color = Colors.green; break;
+      case 'disetujui': color = Colors.blue; break;
+      case 'ditolak': color = Colors.red; break;
+      default: color = Colors.orange;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.grey.shade200),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
-      child: Column(
-        children: [
-          _rowInfo("Tanggal Pinjam", _formatDate(item['tanggal_pinjam'])),
-          const Divider(height: 20),
-          _rowInfo("Rencana Kembali", _formatDate(item['tanggal_kembali'])),
-        ],
+      child: Text(
+        "STATUS: ${status.toUpperCase()}",
+        textAlign: TextAlign.center,
+        style: TextStyle(color: color, fontWeight: FontWeight.bold, letterSpacing: 1.2),
       ),
     );
   }
 
-  Widget _rowInfo(String label, String val) {
+  Widget _rowInfo(String label, String val, {bool isBold = false, Color? textColor}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(color: Colors.black54)),
-        Text(val, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+        Text(val, style: TextStyle(
+          fontWeight: isBold ? FontWeight.bold : FontWeight.w600, 
+          fontSize: 13, 
+          color: textColor
+        )),
       ],
     );
   }

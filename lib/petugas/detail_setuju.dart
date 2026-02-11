@@ -4,7 +4,6 @@ import 'package:intl/intl.dart';
 
 class DetailSetujuPage extends StatefulWidget {
   final Map<String, dynamic> item;
-
   const DetailSetujuPage({super.key, required this.item});
 
   @override
@@ -13,66 +12,141 @@ class DetailSetujuPage extends StatefulWidget {
 
 class _DetailSetujuPageState extends State<DetailSetujuPage> {
   final supabase = Supabase.instance.client;
+  
+  DateTime? _selectedTenggat;
   bool _isLoading = false;
 
   @override
-  Widget build(BuildContext context) {
-    // Helper data bersarang
-    final user = widget.item['users'] as Map<String, dynamic>? ?? {};
-    final List details = widget.item['detail_peminjaman'] as List? ?? [];
-    final detail = details.isNotEmpty ? details.first as Map<String, dynamic> : {};
-    final alat = detail['alat'] as Map<String, dynamic>? ?? {};
-    
-    final statusSekarang = widget.item['status']?.toString().toLowerCase() ?? 'menunggu';
+  void initState() {
+    super.initState();
+    // Inisialisasi tenggat dari database
+    if (widget.item['tanggal_kembali'] != null) {
+      _selectedTenggat = DateTime.parse(widget.item['tanggal_kembali'].toString());
+    } else {
+      _selectedTenggat = DateTime.now().add(const Duration(days: 1));
+    }
+  }
 
-    // Formatter Tanggal
-    String formatTanggal(String? dateStr) {
-      if (dateStr == null) return '-';
-      try {
-        return DateFormat('dd MMMM yyyy', 'id_ID').format(DateTime.parse(dateStr));
-      } catch (e) {
-        return dateStr;
+  Future<void> _pickTenggatDate(BuildContext context) async {
+    // Validasi: Jika sudah bukan 'menunggu', jangan izinkan buka picker
+    if (widget.item['status'] != 'menunggu') return;
+
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedTenggat ?? DateTime.now(),
+      firstDate: DateTime.now(), 
+      lastDate: DateTime(2101),
+    );
+    if (picked != null) {
+      setState(() {
+        _selectedTenggat = picked;
+      });
+    }
+  }
+
+  Future<void> _updateStatus(String status) async {
+    setState(() => _isLoading = true);
+    try {
+      final idPinjam = widget.item['id_peminjaman'];
+
+      await supabase.from('peminjaman').update({
+        'status': status,
+        'tanggal_kembali': _selectedTenggat?.toIso8601String(), 
+      }).eq('id_peminjaman', idPinjam);
+
+      if (mounted) {
+        Navigator.pop(context, true); 
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Berhasil: Status diubah menjadi $status"), backgroundColor: Colors.green),
+        );
       }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Gagal: ${e.toString()}"), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = widget.item['users'] ?? {};
+    final List details = widget.item['detail_peminjaman'] ?? [];
+    final String status = widget.item['status']?.toString().toLowerCase() ?? 'menunggu';
+    
+    // VALIDASI: Cek apakah status masih 'menunggu'
+    final bool isWaiting = status == 'menunggu';
+
+    String formatDate(dynamic date) {
+      if (date == null) return "-";
+      return DateFormat('dd/MM/yyyy').format(DateTime.parse(date.toString()));
     }
 
-    final tanggalPinjam = formatTanggal(widget.item['tanggal_pinjam']);
-    final tanggalKembali = formatTanggal(widget.item['tanggal_kembali']);
-
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E4C90),
-        elevation: 0,
+        title: const Text("Detail Persetujuan", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
         centerTitle: true,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text(
-          'Detail Persetujuan',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: Stack(
         children: [
           SingleChildScrollView(
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildBorrowerHeader(user),
-                const SizedBox(height: 16),
-                _buildSectionTitle('Informasi Alat'),
-                _buildAlatCard(alat, detail),
-                const SizedBox(height: 16),
-                _buildSectionTitle('Waktu Peminjaman'),
-                _buildTimelineCard(tanggalPinjam, tanggalKembali),
-                const SizedBox(height: 32),
+                _buildStatusBanner(status), // Banner Status
+                const SizedBox(height: 20),
+                _buildProfileCard(user['nama'], user['email']),
+                const SizedBox(height: 25),
+                const Text("Daftar Alat", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 10),
+                ...details.map((d) => _buildAlatTile(d)).toList(),
+                const SizedBox(height: 25),
                 
-                // AREA VALIDASI (TOMBOL ATAU BOX STATUS)
-                _buildActionArea(statusSekarang),
-                
-                const SizedBox(height: 40),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.shade200),
+                  ),
+                  child: Column(
+                    children: [
+                      _buildReadOnlyInfo("Tanggal Pinjam", formatDate(widget.item['tanggal_pinjam'])),
+                      const Divider(height: 25),
+                      _buildReadOnlyInfo("Rencana Kembali (User)", formatDate(widget.item['tanggal_kembali'])),
+                      const Divider(height: 25),
+                      
+                      // Bagian Atur Tenggat
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(isWaiting ? "Atur Tenggat Pengembalian" : "Tenggat Pengembalian Tetap", 
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                      ),
+                      const SizedBox(height: 10),
+                      _buildTenggatSelector(isWaiting),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 35),
+                _buildActionButtons(isWaiting), // Tombol dinamis
               ],
             ),
           ),
-          if (_isLoading) _buildLoadingOverlay(),
+          if (_isLoading)
+            Container(
+              color: Colors.black26,
+              child: const Center(child: CircularProgressIndicator()),
+            ),
         ],
       ),
     );
@@ -80,318 +154,154 @@ class _DetailSetujuPageState extends State<DetailSetujuPage> {
 
   // --- UI COMPONENTS ---
 
-  Widget _buildBorrowerHeader(Map user) {
-    String initial = user['nama']?.toString().substring(0, 1).toUpperCase() ?? 'U';
+  Widget _buildStatusBanner(String status) {
+    Color color = status == 'disetujui' ? Colors.green : status == 'ditolak' ? Colors.red : Colors.orange;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withOpacity(0.5)),
       ),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundColor: const Color(0xFF1E4C90).withOpacity(0.1),
-            child: Text(initial,
-              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF1E4C90))),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Peminjam', style: TextStyle(fontSize: 12, color: Colors.grey, letterSpacing: 1.1)),
-                const SizedBox(height: 4),
-                Text(user['nama'] ?? 'Tanpa Nama',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                Text(user['email'] ?? '-',
-                  style: const TextStyle(fontSize: 13, color: Colors.grey)),
-              ],
-            ),
-          ),
-        ],
+      child: Text(
+        "STATUS: ${status.toUpperCase()}",
+        textAlign: TextAlign.center,
+        style: TextStyle(color: color, fontWeight: FontWeight.bold),
       ),
     );
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-      child: Text(title.toUpperCase(),
-        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.2)),
-    );
-  }
-
-  Widget _buildAlatCard(Map alat, Map detail) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.grey.shade200),
+  Widget _buildTenggatSelector(bool clickable) {
+    return InkWell(
+      onTap: clickable ? () => _pickTenggatDate(context) : null,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15),
+        decoration: BoxDecoration(
+          color: clickable ? Colors.blue.shade50 : Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: clickable ? const Color(0xFF1E4C90).withOpacity(0.3) : Colors.grey.shade300),
         ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: alat['gambar_alat'] != null
-                    ? Image.network(
-                        alat['gambar_alat'],
-                        width: 70, height: 70, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _buildPlaceholderIcon(),
-                      )
-                    : _buildPlaceholderIcon(),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(alat['nama_alat'] ?? '-',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text('Jumlah: ${detail['jumlah'] ?? 0} unit',
-                      style: TextStyle(color: Colors.grey.shade700, fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildTimelineCard(String tglPinjam, String tglKembali) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Card(
-        elevation: 0,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.grey.shade200),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              _buildInfoRow('Tanggal Ambil', tglPinjam, Icons.calendar_today_outlined),
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 12),
-                child: Divider(height: 1),
-              ),
-              _buildInfoRow('Estimasi Kembali', tglKembali, Icons.history_outlined),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionArea(String status) {
-    if (status == 'menunggu') {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: _isLoading ? null : () => _showConfirmDialog('ditolak'),
-                style: OutlinedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  side: const BorderSide(color: Colors.red, width: 1.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                child: const Text('TOLAK', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            Text(
+              _selectedTenggat != null ? DateFormat('dd MMMM yyyy', 'id_ID').format(_selectedTenggat!) : "Belum Diatur",
+              style: TextStyle(
+                fontWeight: FontWeight.bold, 
+                color: clickable ? const Color(0xFF1E4C90) : Colors.black54
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: _isLoading ? null : () => _showConfirmDialog('disetujui'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  backgroundColor: const Color(0xFF1E4C90),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                child: const Text('SETUJUI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-              ),
-            ),
+            if (clickable) const Icon(Icons.calendar_month, color: Color(0xFF1E4C90)),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButtons(bool isWaiting) {
+    if (!isWaiting) {
+      // Jika sudah disetujui/ditolak, hanya tampilkan tombol TUTUP
+      return SizedBox(
+        width: double.infinity,
+        height: 50,
+        child: ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.grey.shade800,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+          ),
+          onPressed: () => Navigator.pop(context),
+          child: const Text("Tutup Detail", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
         ),
       );
     }
 
-    // TAMPILAN VALIDASI SETELAH PROSES (DITOLAK/DISETUJUI)
-    bool isApprove = status == 'disetujui';
-    Color themeColor = isApprove ? Colors.green : Colors.red;
-    IconData statusIcon = isApprove ? Icons.check_circle : Icons.cancel;
-
-    return Center(
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.symmetric(vertical: 30, horizontal: 20),
-        margin: const EdgeInsets.symmetric(horizontal: 20),
-        decoration: BoxDecoration(
-          color: themeColor.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: themeColor.withOpacity(0.2)),
-        ),
-        child: Column(
-          children: [
-            // Ikon Bulat Solid
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: themeColor,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(color: themeColor.withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 4))
-                ]
-              ),
-              child: Icon(statusIcon, size: 40, color: Colors.white),
-            ),
-            const SizedBox(height: 20),
-            // Teks Status
-            Text(
-              'Peminjaman ini telah ${status.toUpperCase()}',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: themeColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            // Keterangan
-            Text(
-              isApprove 
-                ? 'Silahkan ambil alat sesuai jadwal yang tertera.' 
-                : 'Maaf, pengajuan ditolak karena alasan tertentu.',
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 13, color: Colors.black54),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlaceholderIcon() {
-    return Container(
-      width: 70, height: 70, color: Colors.grey.shade100,
-      child: const Icon(Icons.inventory_2_outlined, size: 30, color: Colors.grey),
-    );
-  }
-
-  Widget _buildInfoRow(String label, String value, IconData icon) {
+    // Jika masih 'menunggu', tampilkan Setujui & Tolak
     return Row(
       children: [
-        Icon(icon, size: 22, color: const Color(0xFF1E4C90)),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
-            Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-          ],
+        Expanded(
+          child: OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              side: const BorderSide(color: Colors.red),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+            ),
+            onPressed: () => _updateStatus('ditolak'),
+            child: const Text("Tolak Pinjaman", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(width: 15),
+        Expanded(
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1E4C90),
+              padding: const EdgeInsets.symmetric(vertical: 15),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))
+            ),
+            onPressed: () => _updateStatus('disetujui'),
+            child: const Text("Setujui & Simpan", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildLoadingOverlay() {
+  // ... (Widget _buildProfileCard, _buildReadOnlyInfo, dan _buildAlatTile tetap sama)
+  Widget _buildProfileCard(String? nama, String? email) {
     return Container(
-      color: Colors.black45,
-      child: Center(
-        child: Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 30, vertical: 20),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(backgroundColor: Colors.blue.shade100, child: const Icon(Icons.person, color: Color(0xFF1E4C90))),
+          const SizedBox(width: 15),
+          Expanded(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                CircularProgressIndicator(color: Color(0xFF1E4C90)),
-                SizedBox(height: 20),
-                Text('Menyimpan Perubahan...', style: TextStyle(fontWeight: FontWeight.w500)),
+                Text(nama ?? 'Tanpa Nama', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Text(email ?? '-', style: const TextStyle(color: Colors.grey, fontSize: 13)),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- LOGIC FUNCTIONS ---
-
-  void _showConfirmDialog(String newStatus) {
-    final bool isApprove = newStatus == 'disetujui';
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(isApprove ? 'Setujui Peminjaman?' : 'Tolak Peminjaman?'),
-        content: Text('Apakah Anda yakin ingin mengubah status menjadi ${newStatus.toLowerCase()}?'),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('BATAL')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isApprove ? Colors.green : Colors.red,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: () {
-              Navigator.pop(ctx);
-              _updateStatus(newStatus);
-            },
-            child: const Text('YA, PROSES', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _updateStatus(String newStatus) async {
-    if (_isLoading) return;
-    setState(() => _isLoading = true);
+  Widget _buildReadOnlyInfo(String label, String value) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+      ],
+    );
+  }
 
-    try {
-      final response = await supabase
-          .from('peminjaman')
-          .update({'status': newStatus.toLowerCase()})
-          .eq('id_peminjaman', widget.item['id_peminjaman'])
-          .select();
-
-      if (response.isEmpty) throw 'Gagal memperbarui data.';
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Berhasil diperbarui menjadi $newStatus'),
-          backgroundColor: Colors.green,
-          behavior: SnackBarBehavior.floating,
+  Widget _buildAlatTile(Map<String, dynamic> detail) {
+    final alat = detail['alat'] ?? {};
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white, 
+        borderRadius: BorderRadius.circular(12), 
+        border: Border.all(color: Colors.grey.shade200)
+      ),
+      child: ListTile(
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: alat['gambar_alat'] != null 
+            ? Image.network(alat['gambar_alat'], width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.broken_image))
+            : const Icon(Icons.inventory_2, size: 30),
         ),
-      );
-
-      Navigator.pop(context, true);
-
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString()), backgroundColor: Colors.red, behavior: SnackBarBehavior.floating),
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+        title: Text(alat['nama_alat'] ?? '-', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+        subtitle: Text("${detail['jumlah']} Unit", style: const TextStyle(fontSize: 12, color: Colors.blueAccent, fontWeight: FontWeight.w600)),
+      ),
+    );
   }
 }
